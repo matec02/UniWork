@@ -1,0 +1,824 @@
+---
+title: "Multivariate Data Analysis Final Project"
+author: "Matija Jakovac, Dunja Petrović, Léo Serra"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    toc_depth: 4
+  html_document:
+    toc: true
+    number_sections: true
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## In case it's need it, here you can download the libraries
+#install.packages("dplyr")
+#install.packages("Lock5Data")
+#install.packages("ggfortify")
+
+
+# Install if necessary
+#install.packages(c("psych", "corrplot", "FactoMineR", "vegan", "mvoutlier", "caret", "dplyr", "Lock5Data", "ggfortify", "catools"))
+
+library(psych)      
+library(corrplot)   
+library(FactoMineR) 
+library(vegan)      
+library(mvoutlier)  
+library(caret)      
+library(patchwork)
+library(dplyr)
+library(Lock5Data)
+library(ggfortify)
+library(ggplot2)
+library(factoextra)
+library(gridExtra)
+library(cluster)
+library(DescTools)
+library(cabootcrs)
+library(biotools)
+library(MASS)
+library(e1071)
+library(caTools)
+```
+
+\begin{center}
+\vspace*{4cm}
+{\LARGE \textbf{Multivariate Data Analysis Final Project}}\\[1cm]
+{\large \textit{Exploring Health and Nutrition Patterns with PCA, MDS, and CA}}\\[2cm]
+\textbf{Matija Jakovac}\\
+\textbf{Dunja Petrović}\\
+\textbf{Léo Serra}\\[2cm]
+`r format(Sys.Date(), "%B %d, %Y")`
+\end{center}
+\newpage
+
+# Introduction
+
+This project explores multivariate data analysis techniques to investigate complex relationships within a dataset titled Nutrition Study, which includes observations from 315 individuals. The data focuses on nutrition and health-related variables, providing a foundation for examining patterns and associations across multiple dimensions.
+
+The goal of this analysis is to uncover underlying structures in the data, reduce dimensionality where appropriate, and generate insights that contribute to a deeper understanding of the nutritional and health profiles of the individuals studied.The analysis aims to not only describe the structure of the data but also identify key factors influencing outcomes, offering a comprehensive understanding of the studied phenomenon.
+
+**Variables in the Dataset:**
+
+-   **ID** – Identifier number for each individual
+
+-   **Age**
+
+-   **Smoke** – Whether the individual currently smokes (Yes/No)
+
+-   **Quetelet** – Weight divided by height squared: $\frac{\text{weight}}{\text{height}^2}$
+
+-   **Vitamin** – Coded as: 1 = Regularly, 2 = Occasionally, 3 = No
+
+-   **Calories** – Daily calorie intake
+
+-   **Fat** – Grams of fat consumed per day
+
+-   **Fiber** – Grams of dietary fiber per day
+
+-   **Alcohol** – Number of alcoholic drinks consumed per week
+
+-   **Cholesterol** – Cholesterol intake (mg per day)
+
+-   **BetaDiet** – Beta-carotene from food (mcg per day)
+
+-   **RetinolDiet** – Retinol intake from food (mcg per day)
+
+-   **BetaPlasma** – Beta-carotene concentration in blood (ng/ml)
+
+-   **RetinolPlasma** – Retinol concentration in blood (ng/ml)
+
+-   **Sex** – Coded as Male or Female
+
+-   **VitaminUse** – Text-coded version of Vitamin (No, Occasional, Regular)
+
+-   **PriorSmoke** – Smoking history: 1 = Never, 2 = Former, 3 = Current
+
+```{r}
+df <- NutritionStudy
+#write.csv(df, "nutrition_study.csv", row.names = FALSE)
+```
+
+\newpage
+
+# Preprocessing of the dataset
+
+We first standardize our data types, turning text fields into factors and ensuring integer columns are treated as continuous numerics, then isolate only the truly numeric variables. This guarantees that subsequent correlation and KMO analyses run smoothly on a consistent, all‐numeric matrix.
+
+```{r}
+df <- df %>% mutate(across(c(Smoke, Vitamin, Sex, VitaminUse, PriorSmoke), as.factor))
+
+df <- df %>% mutate(across(c(ID, Age, Quetelet, Calories, Fat, Fiber, Alcohol, Cholesterol, BetaDiet, RetinolDiet, BetaPlasma, RetinolPlasma)))
+
+# Numeric-only subset for correlation & KMO
+df_num <- df %>% dplyr::select(where(is.numeric))
+```
+
+## Examine the data
+
+To make PCA and MDS informative, we must remove both redundant and uninformative variables. If we leave these redundancies in place, the first few dimensions will simply reflect the same shared variance over and over—resulting in cramped, uninterpretable plots. Redundant variables (those almost perfectly correlated) exaggerate the same signal, while uninformative ones (those sharing little variance with the rest) add noise. We’ll therefore (a) trim by pairwise correlation, then (b) assess and drop low‐shared‐variance variables via KMO.
+
+### a) Correlation
+
+We inspect the correlation matrix to flag pairs with \|r\| above our cutoff (e.g. 0.7) and then drop one member of each pair. By removing one variable from each such pair, we ensure that the remaining variables capture distinct sources of variation, letting PCA and MDS reveal genuine structure rather than echo the same signal.
+
+```{r}
+# Compute correlation matrix
+cors <- cor(df_num, use = "pairwise.complete.obs")
+# Visualize correlation structure
+corrplot(cors, method = "color", tl.cex = 0.8)
+
+# Identify variables to drop (cutoff = 0.7)
+high_corr_to_remove <- findCorrelation(cors, cutoff = 0.7, names = TRUE)
+high_corr_to_remove  # drop these to reduce collinearity
+```
+
+Looking at the correlation matrix you can see that the only really “hot” cell is the dark blue at Calories ↔ Fat (r ≳ 0.8), confirming those two move almost in lockstep. There are also mild positive correlations between Cholesterol and both Calories and Fat (mid-blue), but beyond that nearly every other pair sits close to zero, indicating most nutrients and biomarkers aren’t strongly tied together. In short, Calories and Fat are essentially redundant, while the rest contribute largely independent signals.
+
+### b) KMO (Low-Shared-Variance Removal)
+
+Next, we compute the Kaiser–Meyer–Olkin (KMO) statistic to quantify how much each variable’s variance is shared with the others.
+
+```         
+•   Overall KMO assesses whether the dataset as a whole is suitable for factor‐based methods (PCA/MDS)—values above \~0.7 are desirable.
+
+•   Individual MSAi scores tell us which variables contribute little common variance: those with MSAi below our threshold (e.g. 0.6) are effectively noise in a factor model.
+```
+
+By dropping any variable with a low MSAi, we concentrate on features that meaningfully co-vary with the rest, boosting the clarity and stability of subsequent PCA and MDS results.
+
+```{r}
+o <- KMO(df_num)
+# Overall measure and per-variable measures
+o$MSA    # overall adequacy
+o$MSAi   # individual MSAs per variable
+```
+
+```{r}
+# Set threshold
+thresh <- 0.6
+low_msa_vars <- names(o$MSAi[o$MSAi < thresh])
+low_msa_vars  # these have too little shared variance
+
+df_msa <- df_num %>% dplyr::select(-all_of(low_msa_vars))
+# Re-check overall adequacy
+KMO(df_msa)$MSA
+```
+
+Even after dropping those low-MSAi variables, the overall KMO remains below 0.6—so we still don’t have ideal sampling adequacy. For now, we’ll proceed with this reduced set and see whether the cleaned data yields any interpretable structure in the PCA and MDS.
+
+## Final Subset After Correlation + MSA Filtering
+
+At this stage, we merge our two exclusion lists, low-MSAi variables and highly collinear pairs, to arrive at a concise, robust set of features. This compact, well-behaved subset is now ideal for running clear, interpretable PCA and MDS.
+
+```{r}
+to_drop <- unique(c(high_corr_to_remove, low_msa_vars))
+df_final <- df_num %>% dplyr::select(-all_of(to_drop))
+# Confirm enhanced adequacy
+KMO(df_final)
+```
+
+# PCA on the Filtered Subset
+
+**Principal Component Analysis (PCA)** is a dimensionality‐reduction technique that transforms a set of correlated variables into a smaller number of uncorrelated “principal components,” each capturing a descending proportion of the dataset’s total variance. By projecting high‐dimensional data onto these new axes, PCA helps us uncover the most salient patterns or clusters and visualize complex relationships in just two or three dimensions.
+
+We’ve seen that applying PCA to the raw dataset didn’t yield much insight—many variables were either redundant or contributed very little shared variance, so the resulting components were hard to interpret. Thus, we first filtered out variables with low sampling adequacy and those that were nearly collinear, producing a leaner subset. Running PCA on this refined set now produces components that more clearly reflect underlying dietary, biomarker, and lifestyle differences among our subjects.
+
+```{r}
+# 1. Run PCA (if not already done)
+pca_res <- PCA(df_final, scale.unit = TRUE, graph = FALSE)
+
+# 2. Create the two plots
+p1 <- fviz_screeplot(
+  pca_res,
+  addlabels = TRUE,
+  ncp       = 5
+) + theme_minimal(base_size = 14) +
+    labs(title = "Scree Plot: Variance Explained")
+
+p2 <- fviz_pca_biplot(
+  pca_res,
+  repel = FALSE,
+  col.var = "steelblue",
+  col.ind = "gray40"
+) + theme_minimal(base_size = 14) +
+    labs(title = "PCA Biplot")
+
+# 3. Combine side-by-side
+p1 | p2
+```
+
+```{r}
+# Second visualization
+smoke_grp <- df$Smoke
+
+prior_smoke_grp <- df$PriorSmoke
+
+# Plot PC1 vs PC2 colored by Smoke
+p1 <- fviz_pca_ind(pca_res, axes = c(1,2), geom = "point", habillage = smoke_grp, palette = c("#E69F00","#56B4E9"), addEllipses = FALSE, repel = TRUE, pointsize = 2) + theme_minimal(base_size = 10) + labs(title = "By Smoke")
+
+# Plot PC1 vs PC2 colored by PriorSmoke
+p2 <- fviz_pca_ind(pca_res, axes = c(1,2), geom = "point", habillage = prior_smoke_grp, palette = c("#E69F00","#56B4E9", "#FC4E07"), addEllipses = FALSE, repel = TRUE, pointsize = 2) + theme_minimal(base_size = 10) + labs(title = "By Prior Smoke")
+
+# Plot PC1 vs PC2 colored by Cholesterol
+p3 <- fviz_pca_ind(
+  pca_res, axes = c(1,2), geom = "point",
+  col.ind      = df$Cholesterol,
+  gradient.cols= c("#00AFBB","#E7B800","#FC4E07"),
+  repel        = TRUE, pointsize = 2
+) + scale_color_gradient(name="Cholesterol", low="#00AFBB", high="#FC4E07") +
+    theme_minimal(base_size = 10) +
+    labs(title = "By Cholesterol")
+
+# Plot PC1 vs PC2 colored by BetaDiet
+p4 <- fviz_pca_ind(
+  pca_res, axes = c(1,2), geom = "point",
+  col.ind      = df$BetaDiet,
+  gradient.cols= c("#00AFBB","#E7B800","#FC4E07"),
+  repel        = TRUE, pointsize = 2
+) + scale_color_gradient(name="BetaDiet", low="#00AFBB", high="#FC4E07") +
+    theme_minimal(base_size = 10) +
+    labs(title = "By BetaDiet")
+
+# 3. Assemble into 2×2 with individual legends, smaller panels
+layout <- (p1 | p2) / (p3 | p4)
+layout + plot_layout(ncol = 1)
+```
+
+From these plots we can see that when plotting individuals on the first two principal components, **Dimension 1** neatly separates those with higher fat, cholesterol and calorie intakes from those at the other extreme. Observations on the right‐hand side of the scatter all tend to score highly on those “unhealthy” measures, while the left side is dominated by lower values. In effect, **PC1** acts as a health‐axis, with more nutritious profiles clustered toward negative scores and more indulgent dietary profiles toward positive scores.
+
+Turning to **Dimension 2**, we see a similar two‐way split, but now it is driven by beta‐carotene intake and plasma levels. Individuals high in both BetaDiet and BetaPlasma appear in the upper half of the plot, whereas those low on these variables fall below. In other words, **PC2** captures a “beta‐carotene” gradient orthogonal to the fat‐cholesterol axis of **PC1**.
+
+Overlaying smoking status reveals a distinct subgroup of current smokers that hugs the lower portion of the cloud in a gentle arc. These points sit where both fat/cholesterol/calorie loadings (right side) and low beta‐carotene scores (bottom) coincide, exactly where we would expect heavier, less vitamin‐rich dietary patterns. Finally, when we color by **PriorSmoke**, three clusters emerge: the **highest** PriorSmoke values align closely with **current smokers** in that bottom‐right corner, the lowest PriorSmoke individuals occupy the **upper‐right** (healthiest along PC1, moderate on PC2), and the **middle** PriorSmoke group scatters between. This three‐way split confirms that individuals’ past smoking behavior echoes their present dietary and biomarker profiles, reinforcing the interpretability of both PCA axes.
+
+**Exploring the Third Principal Component**
+
+Next, we turn our attention to PC3 to verify that we’ve captured all meaningful patterns. By examining its loadings and how individuals project onto PC3, we can confirm whether any additional structure remains beyond what PC1 and PC2 have revealed.
+
+```{r}
+# Re-run PCA if needed
+pca_res <- PCA(df_final, scale.unit = TRUE, graph = FALSE)
+
+# PC1 vs PC3: individuals
+p_ind13 <- fviz_pca_ind(
+  pca_res,
+  axes        = c(1, 3),
+  geom        = "point",
+  habillage   = df$Smoke,                 # color by smoking status, for example
+  palette     = c("#E69F00","#56B4E9"),
+  addEllipses = FALSE,
+  repel       = TRUE
+) + 
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Individuals (PC1 vs PC3)",
+    x     = sprintf("PC1 (%.1f%%)", pca_res$eig[1,2]),
+    y     = sprintf("PC3 (%.1f%%)", pca_res$eig[3,2])
+  )
+
+# PC1 vs PC3: variables
+p_var13 <- fviz_pca_var(
+  pca_res,
+  axes         = c(1, 3),
+  col.var      = "contrib",               # color by contribution
+  gradient.cols= c("#00AFBB","#FC4E07"),
+  repel        = TRUE
+) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "PC1 vs PC3"
+  )
+
+# Combine
+p_ind13 | p_var13
+```
+
+```{r}
+### Visualize PC1 vs PC3 with different color mappings
+
+# By PriorSmoke
+p2 <- fviz_pca_ind(
+  pca_res,
+  axes         = c(1, 3),
+  geom         = "point",
+  habillage      = df$PriorSmoke,
+  palette = c("#E69F00","#56B4E9", "#FC4E07"),
+  repel        = TRUE,
+  pointsize    = 2
+) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "PC1 vs PC3 coloured by PriorSmoke",
+    x     = sprintf("PC1 (%.1f%%)", pca_res$eig[1,2]),
+    y     = sprintf("PC3 (%.1f%%)", pca_res$eig[3,2])
+  )
+
+p2
+```
+
+Seeing the PC1 vs PC3 plots, it becomes clear that PC3 primarily captures the “PriorSmoke” gradient that PC1 and PC2 only hinted at. In the PC1–PC3 scatter, we see a nearly horizontal two‐band split along PC3: points with high PriorSmoke values sit distinctly in the upper zone (PC3 \> 0), while those with low PriorSmoke values occupy the lower region (PC3 \< 0). When we overlay PriorSmoke as a continuous colour scale (bottom plot), the three discrete PriorSmoke levels form three parallel horizontal strata, confirming that PC3 neatly separates our sample by past smoking history. As expected, the highest PriorSmoke group (value = 3) lines up almost perfectly with current smokers on PC1, reinforcing that a strong history of smoking remains a dominant driver of overall variation.
+
+In the PC1 vs PC3 biplot, RetinolDiet and PriorSmoke load strongly in the positive PC3 direction, while BetaDiet and BetaPlasma load in the negative PC3 direction. Cholesterol and RetinolPlasma lie near PC1 but tilt slightly upward, indicating a weaker link to past smoking. In other words, PC3 captures a vitamin‐and‐smoking axis: higher beta‐carotene levels correspond to lower prior smoking, and higher retinol intake corresponds to higher prior smoking.
+
+Overall, by adding PC3 we recover a clear “prior smoking” signal that complements PC1’s fat/cholesterol dimension and PC2’s beta‐carotene dimension, giving us a more complete picture of how diet, biomarkers, and smoking history interact.
+
+# MDS (Classical & Grower)
+
+## **Multidimensional Scaling (Classical)**
+
+MDS is a technique that seeks to place each subject in a low‐dimensional space so that the pairwise distances between points match as closely as possible the original dissimilarities in the data. In other words, it takes a distance matrix and produces a two‐dimensional “map” where nearby points were originally similar and distant points were originally dissimilar.
+
+As you can see in the following plot, applying classical MDS (using Euclidean distance) to our filtered numeric dataset still fails to reveal any clear grouping or pattern:
+
+```{r}
+library(vegan)
+library(ggplot2)
+library(patchwork)
+
+# 1. Compute your distance matrix on the cleaned, scaled data
+dist_mat <- dist(scale(df_final))
+
+# 2a. Classical MDS
+cmd  <- cmdscale(dist_mat, k = 2, eig = TRUE)
+
+# Build a data frame with explicit column names
+df_cmd <- data.frame(
+  MDS1  = cmd$points[,1],
+  MDS2  = cmd$points[,2],
+  Smoke = df$Smoke
+)
+
+# Plot it
+p_cmd <- ggplot(df_cmd, aes(x = MDS1, y = MDS2, color = Smoke)) +
+  geom_point(size = 2, alpha = 0.8) +
+  stat_ellipse(aes(group = Smoke), linetype = "dashed") +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Classical MDS",
+    x     = "MDS1",
+    y     = "MDS2"
+  )
+
+# 3. Combine them side-by-side - categorical var + another distance metric
+p_cmd 
+```
+
+That lack of structure, despite having removed redundant and low‐variance variables, suggests that Euclidean distance over purely numeric columns does not capture the mixed nature of our data.
+
+## **Multidimensional Scaling (Grower)**
+
+That is why we have chosen to compute a **Gower distance** (which handles both numeric and categorical variables) and re‐run classical MDS on the full set of mixed‐type features. By including categorical factors alongside scaled numeric measures, Gower‐based MDS produces a more interpretable map in which groupings by smoking status, vitamin use, sex, and other factors become evident.
+
+```{r}
+# 1. Compute Gower distance on the full df (mixed types)
+gower_dist <- daisy(df, metric = "gower")
+
+# 2. Classical MDS on the Gower matrix
+cmd_gower <- cmdscale(gower_dist, k = 2, eig = TRUE)
+
+# 3. Build a single plotting data.frame
+df_mds <- data.frame(
+  MDS1       = cmd_gower$points[,1],
+  MDS2       = cmd_gower$points[,2],
+  Smoke      = df$Smoke,
+  PriorSmoke = df$PriorSmoke,
+  Sex        = df$Sex,
+  VitaminUse = df$VitaminUse
+)
+
+# 4a. Plot colored by Smoke
+p1 <- ggplot(df_mds, aes(x = MDS1, y = MDS2, color = Smoke)) +
+  geom_point(size = 2, alpha = 0.8) +
+  stat_ellipse(aes(group = Smoke), linetype = "dashed") +
+  theme_minimal(base_size = 10) +
+  labs(
+    title = "MDS (Gower): by Smoke",
+    x     = "MDS1", y = "MDS2",
+    color = "Smoke"
+  )
+
+# 4b. Plot colored by PriorSmoke
+p2 <- ggplot(df_mds, aes(x = MDS1, y = MDS2, color = PriorSmoke)) +
+  geom_point(size = 2, alpha = 0.8) +
+  stat_ellipse(aes(group = PriorSmoke), linetype = "dashed") +
+  theme_minimal(base_size = 10) +
+  labs(
+    title = "MDS (Gower): by PriorSmoke",
+    x     = "MDS1", y = "MDS2",
+    color = "Prior Smoke"
+  )
+
+# 4c. Plot colored by Sex
+p3 <- ggplot(df_mds, aes(x = MDS1, y = MDS2, color = Sex)) +
+  geom_point(size = 2, alpha = 0.8) +
+  stat_ellipse(aes(group = Sex), linetype = "dashed") +
+  theme_minimal(base_size = 10) +
+  labs(
+    title = "MDS (Gower): by Sex",
+    x     = "MDS1", y = "MDS2",
+    color = "Sex"
+  )
+
+# 4d. Plot colored by VitaminUse
+p4 <- ggplot(df_mds, aes(x = MDS1, y = MDS2, color = VitaminUse)) +
+  geom_point(size = 2, alpha = 0.8) +
+  stat_ellipse(aes(group = VitaminUse), linetype = "dashed") +
+  theme_minimal(base_size = 10) +
+  labs(
+    title = "MDS (Gower): by VitaminUse",
+    x     = "MDS1", y = "MDS2",
+    color = "VitaminUse"
+  )
+
+# 5. Assemble in a 2×2 grid
+(p1 | p2) / (p3 | p4)
+```
+
+When we map everyone into two‐dimensional Gower‐MDS space, so that both their numeric (diet, biomarkers) and categorical (smoking, sex, vitamin use) traits feed into the same plot, four striking patterns emerge.
+
+First, the “by Smoke” map shows a nearly complete split: current smokers sit on the right, non‐smokers on the left, with no overlap. This tells us that smoking status alone captures a great deal of the combined variation in diet, biomarkers and lifestyle embedded in the Gower distance.
+
+Second, coloring those same points by PriorSmoke reveals that high prior‐smoke levels cluster tightly with today’s smokers on the far right, while those with the lowest prior‐smoke history fall squarely into the non‐smoker cloud on the left. In other words, a strong past smoking habit predicts both ongoing tobacco use and the broader dietary/biomarker profile that distinguishes smokers from non‐smokers.
+
+Third, although the Sex map is less dramatic, you can still see a subtle shift: females tend to form a narrower, slightly more centralized ellipse, while males are a bit more dispersed toward the outer edges, suggesting small but consistent differences in how men and women combine diet, biomarkers and smoking history.
+
+Finally, the VitaminUse plot neatly carves the space into three diagonal bands: “Regular” supplement users cluster at one extreme, “Occasional” in the middle, and “No” users at the opposite end. This alignment shows that vitamin supplementation habits are as coherent a signal in our mixed data as smoking or prior smoking.
+
+Together, these four panels confirm that our Gower‐based MDS captures real, interpretable structure: smoking and its history dominate one axis and vitamin habits another, while sex adds a finer layer of separation.
+
+# MCA Analysis
+
+Multiple Correspondence Analysis (MCA) is an extension of Correspondence Analysis (CA) designed to analyze and visualize patterns in datasets containing more than two categorical variables. It transforms complex categorical data into a lower-dimensional space, to explore relationships among variables and detect underlying structures. As this dataset contains 5 categorical variables, MCA should be extremely useful in identifying clusters, associations and trends. 
+
+\breakline
+
+First, it is essential to create a dataset that includes only categorical variables, as the initial step of MCA involves one-hot encoding these variables into a binary indicator matrix.
+
+```{r}
+df_mca <- df %>% dplyr::select(where(is.factor))
+```
+
+Next step is defining the Burt and Indicator matrices. A Burt matrix is a special type of matrix that summarizes the relationships between all pairs of categorical variables in a dataset. An indicator matrix transforms a dataset of categorical variables into a binary format where each column represents one category (level) of a variable and each row represents one individual (observation). The cell value is 1 if the individual belongs to that category, 0 otherwise.
+
+```{r}
+getBurt(df_mca)
+tab.disjonctif(df_mca)
+```
+
+Then, MCA is applied to the Indicator matrix.
+
+```{r}
+res.mca <- MCA(df_mca)
+summary(res.mca)
+```
+The two MCA factor maps provide a visualization of relationships between categorical variables and individual observations. The left graph displays the variable categories, with Dimension 1 (explaining 28.79% of variance) distinguishing a lifestyle gradient: on the right side are categories such as Smoke_Yes, PriorSmoke_3, Vitamin_3, VitaminUse_No, and Male, while the left groups Smoke_No, PriorSmoke_1, Vitamin_1, VitaminUse_Regular, and Female. Dimension 2 (25.47% variance) separates categories related to vitamin use frequency, with Vitamin_2 and VitaminUse_Occasional at the top and Vitamin_3 and VitaminUse_No at the bottom. Clusters suggest that smoking males who are prior heavy smokers tend not to use vitamins regularly, while non-smoking females are more likely regular vitamin users. The right graph plots individuals in this same space, where dense clusters correspond to groups sharing similar profiles: those on the far right align with smoking, male, and low supplement use categories, whereas those on the left align with non-smoking, female, and regular vitamin use categories. Overall, the MCA highlights two primary dimensions reflecting lifestyle and supplement use patterns, underscoring strong associations between smoking status, gender, and vitamin consumption behaviors.
+
+To decide which dimensions to retain for further interpretation in MCA, we compare each dimension's percentage of explained inertia to a threshold based on the structure of the data. In this case, we have 5 categorical variables (J = 5), which together produce 13 indicator variables through one-hot encoding (K = 13). The average expected inertia per dimension under the null hypothesis is given by 100/(K - J). Therefore, we keep dimensions whose explained inertia exceeds 12.5%, as they capture more variance than expected by chance.
+
+```{r}
+res.mca$eig
+barplot(res.mca$eig[,2], main="Eigenvalues", names.arg=1:nrow(res.mca$eig))
+```
+Based on the calculation made above, it is indicated we should keep dimensions 1 to 4.
+
+```{r}
+res.mca$var$coord
+
+?dimdesc
+dimdesc(res.mca, axes = 1:4)
+```
+The results reveal that the first 4 dimensions capture meaningful associations between categorical variables related to smoking habits, vitamin use, and sex. Dimension 1 is primarily driven by VitaminUse, Vitamin, PriorSmoke, and Smoke, suggesting that these factors jointly explain a large portion of the variation, with strong separation between users and non-users of vitamins, and smokers vs. non-smokers. Dimension 2 is almost entirely dominated by VitaminUse, particularly the "Occasional" and "Regular" categories, indicating that this variable differentiates individuals along a distinct axis. Dimension 3 again highlights PriorSmoke, Smoke, and VitaminUse, but with a different pattern, emphasizing previous smoking behavior. Dimension 4 is influenced most strongly by PriorSmoke and Sex, with moderate contribution from VitaminUse. Overall, the analysis shows that smoking history and vitamin consumption are the most discriminative variables across the dimensions, while Sex plays a more secondary but still relevant role.
+
+```{r}
+## Cloud of Individuals
+plot.MCA(res.mca,choix="ind",label="none")
+plot.MCA(res.mca,choix="ind",label="none",invisible="var")
+plot.MCA(res.mca,choix="ind",label="none",invisible="var",habillage = "PriorSmoke")
+plot.MCA(res.mca,choix="ind",label="none",invisible="var",habillage = "Sex")
+plot.MCA(res.mca,choix="ind",label="none",invisible="var",habillage = "VitaminUse")
+plot.MCA(res.mca,choix="ind",label="none",invisible="var",habillage = "Vitamin")
+plot.MCA(res.mca,choix="ind",label="none",invisible="var",habillage = "Smoke")
+
+col.var <- c(
+  "blue", # Smoke
+  "blue",
+  "green",  # Vitamin
+  "green",
+  "green",
+  "purple", # Sex
+  "purple", 
+  "orange", # VitaminUse
+  "orange",
+  "orange", 
+  "red",  #PriorSmoke
+  "red",
+  "red"
+)
+
+## Cloud of Categories
+plot(res.mca,invisible=c("ind"),title="Graph of the active categories")
+rownames(res.mca$var$coord)
+plot(res.mca,invisible=c("ind"),col.var=col.var,title="Graph of the active categories")
+
+## Cloud of variables
+plot(res.mca,choix="var",title="Cloud of variables")
+```
+# Cluster analysis
+
+## Hierarchical clustering
+
+```{r}
+df_num<-df_num[,-1]
+df_num<-df_num[-62,]
+cluster_scale <- scale(df_num)
+dist_matrix <- dist(cluster_scale, method = "euclidean") 
+```
+
+```{r}
+hc <- hclust(dist_matrix, method="ward.D2") 
+plot(hc,main="Dendrogram of Ward Method", labels = FALSE) # Dendogram
+
+groups <- cutree(hc, k=5) # cut tree into k clusters
+rect.hclust(hc, k=5, border="red")
+```
+
+## Non - hierarchical clustering
+
+```{r}
+set.seed(33)  
+k=5 # no of clusters
+fit <- kmeans(df_num, k)
+table(fit$cluster)
+
+df_kmeans <- data.frame(df_num, fit$cluster)
+table <- aggregate(df_num,by=list(fit$cluster),FUN=mean)
+table
+#View(table)
+```
+
+## Clustering based on Principal Components
+
+```{r}
+res.pca <- PCA(df_num, ncp = 2)
+res.hcpc <- HCPC(res.pca, graph = FALSE)
+
+fviz_dend(res.hcpc, rect = TRUE, rect_fill = TRUE)
+
+# Visualization of Clusters
+fviz_cluster(res.hcpc, geom = "point", repel = FALSE, show.clust.cent = TRUE,main = "Factor map")
+```
+
+# Discriminant analysis
+
+## LDA - cleaned data
+
+```{r}
+vitamin_use <- df[-62,]$VitaminUse
+df_disc <- cbind(vitamin_use, df_num)
+str(df_disc)
+```
+
+```{r}
+for (i in 2:12){
+  print(colnames(df_disc)[i])
+  print(shapiro.test(df_disc[,i]))
+  qqnorm(df_disc[,i],main=colnames(df_disc)[i])
+  hist(df_disc[,i], main= colnames(df_disc)[i])
+}
+```
+
+
+```{r}
+df_disc_log <- df_disc
+for (i in 2:12){
+  df_disc_log[,i] <- log(df_disc[,i] + 1)
+}
+```
+
+```{r}
+for (i in 2:12){
+  print(colnames(df_disc_log)[i])
+  print(shapiro.test(df_disc_log[,i]))
+  #qqnorm(df_disc[,i],main=colnames(df_disc)[i])
+  #hist(df_disc[,i], main= colnames(df_disc)[i])
+}
+```
+
+```{r}
+pvals <- sapply(df_disc_log[, 2:12], function(col) shapiro.test(col)$p.value)
+normal_vars <- names(pvals[pvals > 0.05])
+df_disc_normal <- df_disc_log[, c("vitamin_use", normal_vars)]
+```
+
+```{r}
+boxM(df_disc[,2:12],df_disc$vitamin_use)
+boxM(df_disc_normal[,2:6],df_disc_normal$vitamin_use)
+```
+
+
+```{r}
+nutritionda<-lda(vitamin_use~Calories+Fat+Fiber+Cholesterol+BetaDiet,data=df_disc_normal)
+
+nutritionda$prior
+
+nutritionpred<-predict(nutritionda)
+
+#Contingency Table of Observed and Predicted Values
+tab<-table(df_disc_normal$vitamin_use,nutritionpred$class)
+tab
+
+#Correct Classification Rate (CCR)
+classrate<-sum(diag(tab))/sum(tab)
+cat("CCR IS: ", classrate, "\n")
+
+#CCR across groups 
+print("CCR across groups:")
+diag(prop.table(tab, 1))
+
+pa<-nutritionda$prior[1]^2 + nutritionda$prior[2]^2 + nutritionda$prior[3]^2
+cat("PA: ", pa)
+```
+## QDA - raw data
+
+```{r}
+qda.fit<-qda(vitamin_use~Age+Quetelet +Calories+Fat+Fiber+Alcohol+Cholesterol+BetaDiet+RetinolDiet+BetaPlasma+RetinolPlasma,data=df_disc)
+
+qda.class <- predict(qda.fit)
+tabqda<-table(qda.class$class,df_disc$vitamin_use)
+tabqda
+
+cat("CCR is: ", sum(diag(tabqda))/sum(tabqda), "\n")
+
+print("CCR across groups:")
+diag(prop.table(tabqda, 1))
+
+pa<-qda.fit$prior[1]^2 + qda.fit$prior[2]^2 + qda.fit$prior[3]^2
+cat("PA: ", pa)
+```
+
+## Naive - Bayes
+
+
+```{r}
+cor_matrix <- cor(df_num)
+high_cor <- findCorrelation(cor_matrix, cutoff = 0.75)
+names(df_num)[high_cor]
+df_bayes <- df_disc[, -(high_cor+1)]
+```
+
+```{r}
+nb.nutrition<-naiveBayes(vitamin_use~Age+Quetelet +Fat+Fiber+Alcohol+Cholesterol+BetaDiet+RetinolDiet+BetaPlasma+RetinolPlasma,data=df_bayes)
+
+nb.class <- predict (nb.nutrition , df_bayes)
+tabnb<-table(nb.class, df_bayes$vitamin_use)
+tabnb
+
+mean(nb.class==df_bayes$vitamin_use)
+
+nb.preds<-predict(nb.nutrition,df_bayes, type="raw")
+nb.preds[1:15,]
+```
+
+
+```{r}
+split <- sample.split(df_bayes, SplitRatio = 0.7)
+train<- subset(df_bayes, split == "TRUE")
+test <- subset(df_bayes, split == "FALSE")
+
+# Fitting Naive Bayes Model on train data
+set.seed(120)  # Setting Seed
+naive_nutr <- naiveBayes(vitamin_use ~ ., data = train)
+
+# Predicting classes for test data using the previous model
+ypred <- predict(naive_nutr, newdata = test)
+
+# Confusion Matrix
+conf_m <- table(test$vitamin_use, ypred)
+confusionMatrix(conf_m)
+```
+
+
+# ANOVA/MANOVA
+
+## Transformation
+
+```{r}
+######### Multivariate Normality #####
+for (i in 2:11){
+  #hist(posdep[,i], main=paste(colnames(posdep)[i]))
+  print(colnames(df_num)[i])
+  print(shapiro.test(df_num[,i]))
+  print(hist(df_num[,i], main= colnames(df_num)[i]))
+  #print(ks.test(posdep[,i], "pnorm", mean=mean(posdep[,i]), sd=sd(posdep[,i])))
+}
+```
+```{r}
+df_num_log <- df_num
+for (i in 1:11){
+  df_num_log[,i] <- log(df_num[,i] + 1)
+}
+```
+
+```{r}
+for (i in 1:11){
+  #hist(posdep[,i], main=paste(colnames(posdep)[i]))
+  print(colnames(df_num_log)[i])
+  print(shapiro.test(df_num_log[,i]))
+  #hist(df_num_log[,i], main= colnames(df_num)[i])
+  #print(ks.test(posdep[,i], "pnorm", mean=mean(posdep[,i]), sd=sd(posdep[,i])))
+}
+```
+
+```{r}
+pvals <- sapply(df_num_log[, 1:11], function(col) shapiro.test(col)$p.value)
+normal_vars <- names(pvals[pvals > 0.05])
+normal_vars
+df_num_normal <- df_num_log[, normal_vars]
+```
+
+```{r}
+df_manova <- cbind(df[-62, c("PriorSmoke", "VitaminUse")], df_num_normal)
+df_manova2 <- cbind(df[-62, c("PriorSmoke", "VitaminUse")], df_num[, c("Quetelet", "Calories", "Fat", "Fiber", "Cholesterol")])
+```
+
+```{r}
+boxM(df_manova[,3:7],df_manova$VitaminUse)
+boxM(df_manova[,3:7],df_manova$PriorSmoke)
+
+boxM(df_manova2[,3:7],df_manova2$VitaminUse)
+boxM(df_manova2[,3:7],df_manova2$PriorSmoke)
+```
+## PriorSmoke
+
+```{r}
+pos_man<-manova(cbind(Calories, Fat, Fiber, Cholesterol, BetaDiet) ~ PriorSmoke,data=df_manova)
+summary.aov(pos_man)
+```
+
+```{r}
+message("Fiber means (raw values) by Smoking Group:")
+tapply(df_manova$Fiber, df_manova$PriorSmoke, mean) |> exp()
+message("Fat means (raw values) by Smoking Group:")
+tapply(df_manova$Fat, df_manova$PriorSmoke, mean) |> exp()
+
+TukeyHSD(aov(Fiber~PriorSmoke,data=df_manova),"PriorSmoke")
+TukeyHSD(aov(Fat~PriorSmoke,data=df_manova),"PriorSmoke")
+
+boxplot(Fiber ~ PriorSmoke, data = df_manova, main = "Fiber by Smoking Group", ylab = "log-Fiber")
+boxplot(Fat ~ PriorSmoke, data = df_manova, main = "Fat by Smoking Group", ylab = "log-Fat")
+```
+
+```{r}
+pos_man3<-manova(cbind(Quetelet, Calories, Fat, Fiber, Cholesterol) ~ PriorSmoke,data=df_manova2)
+summary.aov(pos_man3)
+```
+
+
+```{r}
+TukeyHSD(aov(Quetelet~PriorSmoke,data=df_manova2),"PriorSmoke")
+```
+
+## VitaminUse
+
+```{r}
+pos_man2<-manova(cbind(Calories, Fat, Fiber, Cholesterol, BetaDiet) ~ VitaminUse,data=df_manova)
+summary.aov(pos_man2)
+```
+
+
+```{r}
+pos_man4<-manova(cbind(Quetelet, Calories, Fat, Fiber, Cholesterol) ~ VitaminUse,data=df_manova2)
+summary.aov(pos_man4)
+
+```
+
+# Hotelling T2 Test
+```{r}
+df_log <- df
+
+df_log[, sapply(df_log, is.numeric)] <- lapply(df_log[, sapply(df_log, is.numeric)], log)
+
+HotellingsT2Test(cbind(Calories, Fat, Fiber, Cholesterol, BetaDiet ) ~ Smoke, data=df_log)
+```
+Hotelling’s T² test was conducted to evaluate whether there is a difference in the multivariate means of the nutritional variables (Calories, Fat, Fiber, Cholesterol, BetaDiet) between smokers and non-smokers. The null hypothesis states that the mean vectors of these variables are equal across the two groups, while the alternative hypothesis states that at least one mean differs. The test yielded T² = 4.6881 with degrees of freedom 5 and 309, resulting in a p-value of 0.0003847. Since the p-value is less than 0.05, we reject the null hypothesis and conclude that there is a statistically significant difference in the combined nutritional profile between smokers and non-smokers.
+
+```{r}
+
+HotellingsT2Test(cbind(Calories, Fat, Fiber, Cholesterol, BetaDiet ) ~ Sex, data=df_log)
+
+```
+
+
+Similarly, Hotelling’s T² test was applied to compare the multivariate means of Calories, Fat, Fiber, Cholesterol, and BetaDiet between males and females. The null hypothesis posits that there is no difference in the mean vectors between the two sexes, and the alternative hypothesis suggests a difference in at least one variable. The test produced a T² statistic of 4.1494 with degrees of freedom 5 and 309, and a p-value of 0.001158. Given that the p-value is below 0.05, we reject the null hypothesis, indicating significant differences in the multivariate nutritional measures between males and females.
+
+
+
+
+
+

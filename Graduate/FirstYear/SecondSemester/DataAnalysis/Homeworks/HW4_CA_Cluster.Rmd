@@ -1,0 +1,206 @@
+---
+title: "Homework 2 - Correspondence and Cluster Analyses"
+author: "Matija Jakovac, Dunja Petrović, Léo Serra"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(FactoMineR)
+library(factoextra)
+```
+
+# 1. First do the exploratory data analysis.
+
+```{r}
+olympic_df <- read.csv("olympic2000.csv", stringsAsFactors = FALSE)
+str(olympic_df)
+```
+
+```{r, echo=FALSE}
+#summary(olympic_df)
+```
+
+## a) Import the data set correctly to R and assign type of each variable correctly and assign the country names as labels to the rows of the data frame
+
+```{r}
+rownames(olympic_df) <- olympic_df$Country
+olympic_df$Country <- NULL
+head(olympic_df, n=3)
+```
+
+## b) Create a data frame only consisting of the variables Gold, Silver, Bronze number of medals and the logarithm of the variables population, GDP and athletes.
+
+```{r}
+eda_df <- olympic_df[, c("Gold2000", "Silver2000", "Bronze2000", 
+                         "Log.population", "Log.GDP", "Log.athletes")]
+head(eda_df, n=3)
+```
+
+# 2. Application of Correspondence Analysis (CA)
+
+```{r}
+# Creation of a contingency table with only the medal counts
+medals_df <- olympic_df[, c("Gold2000", "Silver2000", "Bronze2000")]
+# Run Correspondence Analysis
+ca_result <- CA(medals_df, graph = FALSE)
+# Better visualization of the CA plot
+fviz_ca_biplot(ca_result, repel = TRUE)
+```
+
+
+```{r, echo=FALSE}
+# Plot only countries (rows)
+# fviz_ca_row(ca_result, repel = TRUE)
+# Plot only medal types (columns)
+# fviz_ca_col(ca_result, repel = TRUE)
+```
+
+In the CA biplot, the **first dimension** clearly separates countries based on medal quality. Countries positioned on the right, near **Gold2000** and **Silver2000** (such as **United States, Russia, China, France**, etc...), are more strongly associated with higher-value medals. In contrast, countries on the left side, closer to **Bronze2000** (like **Spain, Canada, Morocco, Belarus**, etc...), are more aligned with bronze medals or generally lower medal performance. This suggests that **Dimension 1** captures the gradient from top-performing to lower-performing countries in terms of medal type.
+
+**Dimension 2** appears to capture the **dominant or exclusive type of medal** a country earned. Countries at the top of this axis, like **Ireland** and **Nigeria**, are characterized by **silver-only** performances. In contrast, those at the bottom, such as **Slovenia** and **Mozambique**, are distinguished by **gold-only** outcomes. Countries near the center, including many larger delegations, tend to have a **more balanced medal profile**, winning across multiple categories. Thus, **Dimension 2** doesn’t just reflect diversity vs. concentration — it also reveals a **vertical spectrum of medal type dominance**, with silver-specialized nations at the top and gold-specialized ones at the bottom.
+
+
+#  3. Hierarchical and Non-Hiearchical Clustering
+
+## d) Apply hierarchical clustering considering all the variables in the data frame constructed in section (b). Show the dendrogram that is constructed by the most interpretable method.Decide how many clusters to use.
+```{r}
+eda_df_s<-scale(eda_df)
+d <- dist(eda_df_s, method = "euclidean") # Euclidean distance matrix
+dm <- dist(eda_df_s, method = "manhattan")
+```
+
+
+```{r, echo=FALSE}
+op <- par(mfrow = c(2, 3),      
+          mar   = c(4, 4, 2, 1)
+)
+
+fit <- hclust(d, method="complete") 
+plot(fit, main="Complete Linkage, Euclidean", labels = FALSE) # Dendrogram
+
+fit <- hclust(dm, method="complete")
+plot(fit, main="Complete Linkage, Manhattan", labels = FALSE)
+
+fit2 <- hclust(d, method="single") 
+plot(fit2, main="Single Linkage", labels = FALSE) # Dendrogram 
+
+# Average Linkage
+fit3 <- hclust(d, method="average") 
+plot(fit3, main="Average Linkage", labels = FALSE) # Dendrogram 
+
+# Ward·s Method
+fit4 <- hclust(d, method="ward.D2") 
+plot(fit4, main="Ward's method", labels = FALSE) # Dendrogram 
+
+plot.new()
+text(0.5, 0.5, " ", cex = 0)  
+
+# restore previous graphics settings
+par(op)
+```
+
+The most interpretable method seems to be the Ward's method because all six variables are positively correlated and Ward's criterion matches exactly that geometry (most clusters would be among one main axis - PC1) whereas criteria that are distance based are more sensitive to pairwise distances and because of that they separate the clusters more (single linkage).
+
+```{r}
+fit4 <- hclust(d, method="ward.D2") 
+```
+
+
+```{r, echo=FALSE}
+plot(fit4, main="Ward's method", labels = FALSE) # Dendrogram
+
+# K=3
+groups <- cutree(fit4, k=3) # cut tree into k clusters
+rect.hclust(fit4, k=3, border="blue")
+
+# K=4
+groups <- cutree(fit4, k=4) # cut tree into k clusters
+rect.hclust(fit4, k=4, border="green")
+
+# K=5
+groups <- cutree(fit4, k=5) # cut tree into k clusters
+rect.hclust(fit4, k=5, border="red")
+```
+
+Deciding on how many clusters we use is observing the dendrogram and looking for the largest "vertical jump" between increasing number of clusters. In other words, we look for biggest gap between two consecutive heights. We can examine that the largest just, besides k=2, is when k=3 dividing into 3 blue clusters. We would not choose k=2 as that is the too basic approach and commonly clusters are not separated into 2. So the largest jump besides that is when k=3 as we can see largest gap in that part so we can the dendrogram at k=3. By doing that we can get clusters with more interpretable structure than just dividing into two groups.
+
+## e) Use Pseudo-F index to decide number of clusters. 
+
+```{r}
+aux<-c()
+for (i in 2:5){
+  k<-kmeans(eda_df_s,centers=i,nstart=25)
+  aux[i-1]<-((k$betweenss)*(nrow(eda_df)-i))/((k$tot.withinss)*(i-1))
+}
+plot(2:5,aux, xlab="Number of Clusters", ylab="Pseudo-F", type="l", main="Pseudo F Index")
+```
+The chosen number of clusters is 3. This also complies with cutting the dendrogram at k=3 height. the highest pseudo-F value is at k=2 but the drop in value is that large with k=3 and with three clusters we would get richer and interpretable structure as well.
+
+## f) Apply k-means clustering by taking k as the selected number of clusters.
+
+```{r}
+k=3
+fit <- kmeans(eda_df_s, k)
+eda_df_kmeans <- data.frame(eda_df, fit$cluster)
+```
+
+
+```{r, echo=FALSE}
+# Group Means 
+aggregate(eda_df_kmeans,by=list(fit$cluster),FUN=mean)
+```
+
+## g) Interpret constructed clusters.
+
+When interpreting these results, it has to be taken into account that some of these values are logarithms of actual values, so even if the numbers don't seem as different cluster-to-cluster, the actual differences are great.
+
+The countries such as USA, Russia, China, Australia and Germany are countries with extremely high medal counts (around 20 in each category), large economies (logGDP > 13.5), big populations and big athletic delegations. The exact countries in this cluster are the ones we usually see winning most medals at every Olympics.
+
+The countries such as Spain, Italy, Great Britain etc. are the countries with mid medal counts (around 5 in each category), as well as the populations and GDP (logGDP around 12). They also have smaller athletic delegations than countries in the first cluster. They still have good results, just not as good as the countries mentioned in the first cluster.
+
+The countries in the last remaining cluster have lower gold, silver and bronze medal counts (around 1.5 in each category), lower average populations and lower average GDP (log-value around 10). Also, the number of athletes representing them at the Olympics is smaller than in other clusters. These countries are likely developing countries or those that don't invest as much in Olympic sports.
+
+## h) Apply hierarchical clustering on PCA scores by using HCPC() function in R. Interpret your findings.
+
+```{r, warning=FALSE}
+pca_res <- PCA(eda_df, ncp = 3, graph = FALSE)
+hcpc_res <- HCPC(pca_res, graph = FALSE)
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+fviz_dend(hcpc_res, rect = TRUE, rect_fill = TRUE, ggtheme = theme(text = element_text(size = 4)))
+
+fviz_cluster(hcpc_res, repel = TRUE, show.clust.cent = TRUE,main = "Factor map", ggtheme = theme(text = element_text(size = 6)))
+```
+
+### Factor map interpretation
+
+We can see PC1 component accumulates for nearly 70% of inertia and PC2 for around 15% which means calculating with three components is enough as they accumulate for nearly 80% of inertia.
+
+On positive side of PC1 there are countries with high all medal counts with also high population, GDP and athletic delegations. Such countries are United States, Russia, China etc. Some countries on the opposite side of PC1 are Mozambique, Ireland, Israel as they won only one medal on Olympics and do not have big number of athletes representing them. This axis represent overall size and success.
+
+High on the positive side of PC2 we can see India as they high population but they got small number of medals compared to their size. Japan and Brazil would also go into that category as they have big population and GDP compared to numbers of medals won. On the negative side of PC2 we can find over-achievers such as Jamaica and Cuba as they won a lot of medals compared to their relatively small population and GDP.
+
+### Cluster interpretation
+
+Those PCA representations/scores translate also to the hierarchical clustering because it is based on PCA scores. After performing HCPC() with Ward's method dendrogram and and PC plot both show separation into 3 clusters.
+
+The red, number 1, cluster is positioned mostly on the left side of factor map, specifically on the bottom left part where there are negative values of both PC1 and values of PC2 vary. Example of countries in that cluster are Kenya, Ethiopia, Latvia, Bulgaria, Costa Rica,... Those countries have small number of medals won as well as lower GDP and small population than the rest of countries. Most of them over-achieve as some of them won a lot of medals despite their small population and low GDP making "medal-efficiency" high.
+
+The green, number 2, cluster is the biggest cluster. The center of the cluster is positioned very close to the origin of factor map but most of the countries lay in first quadrant having positive PC1 and PC2 values. Some of the countries in the cluster are Great Britain, Spain, Brazil, Switzerland,... They have higher GDP and larger population than the ones in the red cluster with also higher medal count. It could be said those countries are emerging powers having solid number of medals won but also moderate GDP and population.
+
+The blue, number 3, cluster clearly represent global powerhouses as they position themselves on the extreme right of factor map having high PC1 value and moderate PC2 value. Those countries have a lot of medals won especially USA with over 100 total medals won. Other countries that are in cluster are Russia, Australia, France, China, Italy,... When there is talk about sports including those countries all of them invest a lot into sports. One of the reasons they can do that is larger GDP and as they have larger population they statistically have more chance of having great athletes that can compete at the Olympics and win a medal.
+
+## i) Which of the above hierarchical clustering methods would you choose? Why?
+
+Among the methods displayed in the analysis the most appropriate choice would probably be Ward's method with Euclidean distance dendrogram. It produces compact clusters as it minimises increase in variance within cluster. That improves the separation of clusters as countries that are in the same clusters have as much similar features as they can. Single linkage and complete/average linkage have flaws with either chaining all countries into one branch or having many singletons. We can also see that Ward's method is consistent with two other criteria, pseudo F-index and HCPC using PCA scores. They also show same cluster separation but are not that reliable as Ward's but they prove the results Ward's method gives.
+
+
+
+
+
+
+

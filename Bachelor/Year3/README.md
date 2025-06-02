@@ -1,4 +1,4 @@
-## 📚 Year 3 – Academic Summary
+## 📚 Year 3 (Bachelor) – Academic Summary
 
 **Total ECTS earned this year: 61 ECTS**
 

@@ -40,13 +40,10 @@ The graduate program builds upon the undergraduate foundation with deeper and mo
 
 - Distributed and parallel computing
 - Machine learning and data-driven inference
-- Scalable web and mobile applications
-- Advanced software design and architecture
 - Research methodology and scientific writing
 
 Skills being developed:
 - Critical analysis and research-based problem solving
-- Implementation of efficient, distributed software systems
 - Application of statistical and AI methods in real-world domains
 - Collaborative project work across interdisciplinary teams
 

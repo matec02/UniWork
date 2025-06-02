@@ -1,8 +1,8 @@
-# 📚 Year 2 – Academic Summary
+## 📚 Year 2 (Bachelor) – Academic Summary
 
 **Total ECTS earned this year: 60 ECTS**
 
-## 📘 Semester 3 (Winter)
+### 📘 Semester 3 (Winter)
 
 Required courses:
 - **Algorithms and Data Structures** – Grade: 5 (6 ECTS)
@@ -17,7 +17,7 @@ Transversal course:
 
 ---
 
-## 📙 Semester 4 (Summer)
+### 📙 Semester 4 (Summer)
 
 Required courses:
 - **Communication Networks** – Grade: 5 (6 ECTS)

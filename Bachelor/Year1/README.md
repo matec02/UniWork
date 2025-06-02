@@ -1,8 +1,8 @@
-# 📚 Year 1 – Academic Summary
+## 📚 Year 1 (Bachelor) – Academic Summary
 
 **Total ECTS earned this year: 60 ECTS**
 
-## 📘 Semester 1 (Winter)
+### 📘 Semester 1 (Winter)
 
 Required courses:
 - **Communication Skills** – Grade: 4 (4 ECTS)
@@ -14,7 +14,7 @@ Required courses:
 
 ---
 
-## 📙 Semester 2 (Summer)
+### 📙 Semester 2 (Summer)
 
 Required courses:
 - **Fundamentals of Electrical Engineering** – Grade: 3 (7 ECTS)
@@ -25,5 +25,3 @@ Required courses:
 
 Transversal course:
 - **Information Searching and Technical Writing** – Grade: 5 (2 ECTS)
-
-Total: 30 ECTS + 0 ECTS (PE)

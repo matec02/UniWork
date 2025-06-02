@@ -1,0 +1,831 @@
+---
+output:
+  pdf_document:
+    toc: true       
+    toc_depth: 5
+    number_sections: true
+    keep_tex: true
+    includes:
+      in_header:   header.tex
+      before_body: front_matter.tex
+    
+---
+
+# Introduction
+
+Accurately measuring the trajectory of energy demand is critical for **government policies, investors, and climate activities**.  
+The **`EnerUSA`** series provides a long run monthly record of **primary energy consumption in the United States (billions of British Thermal Units - BTU)** which is an indicator that combines fossil, nuclear, and renewable sources.
+
+A validated forecast of this series can
+
+* support government in setting targets and policies;  
+* determine utilities in mix fuel decisions;  
+* inform private sector investment in infrastructure
+* serve as an input to carbon emissions scenarios.
+
+## Project objective
+
+Corresponding to the guidelines, objective is to **construct and validate an ARIMA-based forecasting with automatic outlier detection for the `EnerUSA` series**. Specifically, following objectives will be done: 
+
+1. **Identify** the transformations required for stationarity, justified by plots and formal tests. 
+2. **Estimate** two ARIMA specifications and compare them.  
+3. **Validate** model assumptions via full residual analysis (independence, normality, homoscedasticity), check stability, and determine accuracy by reserving the final 12 observations for validation.  
+4. **Forecast** U.S. primary energy consumption 12 months ahead, providing point forecasts and confidence bands.  
+5. **Detect and interpret outliers**, re-estimate the chosen model on the adjusted series with outlier treatment, and compare the new forecasts with the originals.  
+
+## Expected benefits
+
+* **Investment timing** – investors gain a great knowledge for making financing decisions.
+* **Policy evaluation** – government can track the efficiency standards or incentives by comparing consumption against forecast.
+* **Climate modelling** – enabling more credible long-term climate-impact decisions.  
+
+By combining the Box–Jenkins methodology with outlier-adjustment techniques, goal is to produce **high-confidence forecasts** that remain robust even in the presence of unusual activity.
+
+# Basic description of the dataset  
+
+## Context  
+The dataset represents fossil-fuel, nuclear, and renewable inputs into a single line that people track as the measure of U.S. energy demand. 
+
+## Variables  
+| Variable | Description | Unit | Notes |
+|----------|-------------|------|-------|
+| `date`   | Calendar month | — | January 1990 – December 2019 |
+| `energy` | Total primary energy consumption | **Bilions Btu** | Sum across all fuels and sectors |
+
+## Sample size and coverage  
+* **Frequency:** Monthly  
+* **Period:** **Jan 1990 – Dec 2019**  
+* **Observations:** **348** (29 years × 12 months)
+
+## Data collection method
+
+The **`EnerUSA`** series represents the *total primary energy consumed in the United States*, reported every month by the **U.S. Energy Information Administration (EIA)** in its *Monthly Energy Review*. Data is given through the EIA’s **Total Energy Data Browser**, which offers CSV, Excel, and API downloads.
+
+# Summary of Methodology
+
+The project applies a **five-step Box–Jenkins methodology**—together with automatic outlier handling to the monthly *EnerUSA* series:
+
+1. **Identification** 
+- Transform (log) and difference (regular + seasonal) the series to secure stationarity, justify transformations with both numerical (comparing variance) and graphical (plotting series after differencing) results; 
+- Analyze lags of ACF/PACF graphs to identify two possible models, in other words getting all needed parameters (p,q,P,Q) for ARIMA model
+
+2. **Estimation**
+- Fit both models with maximum-likelihood (`arima()`)
+- Performing t-test for significance of model coefficients using t-test
+- Compare AIC/BIC of the models
+
+3. **Validation**
+- Validating if residuals are casual and invertible calculating modulus of charateristic polynomial roots
+- Validating if residuals are homoscedastic plotting the residuals and square root of absolute residuals with smoothing
+- Validating if residuals follow normal distribution plotting Q-Q plot and histogram with superimposed normal curve
+- Validating if residuals are independent computing Shapiro-Walk, Anderson-Darling and Jarque Bera tests and plotting Ljung-Box test
+- Assessing forecasting accuracy of the models by reserving last 12 observation as test dataset for model trained on the remaining dataset 
+- Computing model fit metrics, RMSE and MAE, RMSPE and MAPE and mean of prediction confidence interval
+- Selecting the better model for forecasting depending on the performed validation and model metrics
+
+4. **Forecasting** 
+- Generate 12-month future forecasts and confidence intervals from the chosen model
+- Visualizing them against the observed data
+
+5. **Outlier Treatment**
+- Apply automatic outlier detection for selected model and interpret detected anomalies
+- Adjust the series for outliers
+- Perform re-estimation and validation steps again
+- Compare the results with the original series
+- Generate forecast for the original with adjusted model and compare the forecast to the previous ones
+
+# Results and interpretation
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment=NA,
+                      fig.env = 'center',  # or set fig.env = 'NULL' to drop any wrapping
+                      fig.align = 'center')
+
+```
+
+## Identification
+
+```{r}
+serie=ts(read.table("EnerUSA.dat"),start=1990,freq=12)
+plot(serie, main="Energy USA", ylab="Bilions of BTU (British Thermal Units)")
+abline(v=1990:2019,lty=3,col=4)
+```
+
+This plot represents original obtained time series. Logarithmic operation will be performed on the time series for easier observation.
+
+
+```{r}
+lnserie=log(serie)
+monthplot(lnserie, main="Monthplot of Energy USA", ylab="Log Value")
+```
+
+The month-plot of log values shows seasonal pattern with winter peaks and spring minimals. This pattern represents more energy spending in winter where energy is used for heating in buildings and for electricity during the night which is longer during winter. Minimal values are present in spring because it is the time heating is no longer needed and days are becoming longer. Summer comes with high temperature which means spending more energy on air conditioning. Autumn is similar to spring as it has lower temperatures. Overall, month-plot confirms stable and winter high-peaking seasonality in energy consumption.
+
+```{r}
+d12lnserie=diff(lnserie,12)
+plot(d12lnserie, main="Series after 1 seasonal differencing (d=0, D=1)")
+```
+
+After performing seasonal difference with **s=12** as that represent year seasonal pattern, we can clearly see that the series is still not stationary having non-constant variance. We must perform regular difference.
+
+```{r}
+d1d12lnserie=diff(d12lnserie)
+plot(d1d12lnserie, main="Series after 1 regular and seasonal differencing (d=1, D=1)")
+```
+
+After performing **one** regular and seasonal difference we can see that the series is **stationary** and we can use this transformed series having constant variance.
+
+```{r}
+plot(diff(d1d12lnserie), main="Series after 2 regular and 1 seasonal differencing (d=2, D=1)")
+```
+
+Maybe someone could say the series is still not stationary but after performing another regular difference we can assume that would be over-differencing.
+
+```{r}
+#Compare variance
+cat("Variance of log-transformed original (d=0,D=0) series:", var(lnserie), "\n")
+cat("Variance of after one seasonal differencing (d=0,D=1) at s=12:", var(d12lnserie), "\n")
+cat("Variance of after one regular and seasonal differencing (d=1,D=1) differencing:", var(d1d12lnserie), "\n")
+cat("Variance of after two regular and one seasonal differencing  (d=2,D=1) differencing:", var(diff(d1d12lnserie)), "\n")
+```
+
+We prove that by computing variance of all series we perform differencing and look for the series having smallest variance. It is series with **one** regular and seasonal differencing so that first parameters of model are **d=1** and **D=1**.
+
+```{r}
+par(mfrow=c(1,2))
+acf(d1d12lnserie, main="ACF", ylim=c(-1,1),lag.max = 6*12,lwd=2,col=c(2,rep(1,11)))
+pacf(d1d12lnserie, main="PACF", ylim=c(-1,1),lag.max = 6*12,lwd=2,col=c(rep(1,11),2))
+par(mfrow=c(1,1))
+```
+
+**SEASONAL COMPONENT** $ARMA(P,Q)_{12}$: We will focus only on the red-colored lags and apply the identification criteria used for standard lags.
+
+ACF: We can see that last red-colored lag that crosses blue line which represents confidence band is at lag=2 so I can propose *MA(2)*.
+
+PACF: I can propose *AR(3)* as the third red line(lag=3) is over the confidence band (blue line) by a little bit. The sixth red line, last one, could be taken in consideration but as we usually want less parameters in models, I will not take it into consideration.
+
+**REGULAR COMPONENT ARMA(p,q):** We will focus only on the first 5-6 lags given the seasonality is 12. We must keep in mind that near the multiples of the seasonality (lags of order 12, 24, 36, etc.), there may be significant satellite lags that should not be considered for identification.
+
+ACF: I can propose *MA(3)* because third black lag is over the confidence band and it is the last one do cross it.
+
+PACF: I can propose *AR(2)* because the last lag that is over the band is second one.
+
+With that I can propose models with **d=1, D=1** and regular comp. of **AR(2), MA(3)** and seasonal comp. of **AR(3), MA(2)** of which I will take two models.
+
+Model 1) $ARIMA(2,1,0)(0,1,2)_{12}$ where I took **AR(2) for regular comp.** and **MA(2) for seasonal comp.**
+
+Model 2) $ARIMA(0,1,3)(3,1,0)_{12}$ where I took **MA(3) for regular comp.** and **AR(3) for seasonal comp.**
+
+## Estimation
+
+Firstly, we specify the transformed stationary series (W_t) to obtain mean estimation. After that, we check if the mean is significant. Last step is to check if coefficients are significant. Those checks are performed using t-test.
+
+For t-test we can use following hypothesis:
+
+H_0: u_wt = 0
+
+H_1: u_wt != 0
+
+t = u/S_u
+
+abs(t) > 2 => reject H_0, abs(t) <= 2 => H_0
+
+### Model 1
+
+The model we are going to estimate is $ARIMA(2,1,0)(0,1,2)_{12}$.
+
+```{r}
+(mod1<-arima(d1d12lnserie, order=c(2,0,0), seasonal = list(order=c(0,0,2), period=12)))
+# if intercept is not significant -> do t-test
+```
+
+By looking at intercept we can see that u=0.0 while S_u=0.0001. 
+In this case abs(t)=0 which means we keep H_0 therefore mean is not significant and we can re-estimate model with log(X_t)
+
+
+```{r}
+(mod1<-arima(lnserie, order=c(2,1,0), seasonal = list(order=c(0,1,2), period=12)))
+```
+
+On this model we can also perform t-test for every coefficient to see if they are significant or not. We can see that every coefficient is significant as their s.e. is at least two times smaller than absolute value of coefficient.
+
+### Model 2
+
+Model 2) $ARIMA(0,1,3)(3,1,0)_{12}$
+
+```{r}
+(mod2<-arima(d1d12lnserie, order=c(0,0,3), seasonal = list(order=c(3,0,0), period=12)))
+```
+
+Same as in model 1 the mean here is not significant and we can continue with log(X_t).
+
+```{r}
+(mod2<-arima(lnserie, order=c(0,1,3), seasonal = list(order=c(3,1,0), period=12)))
+```
+
+Performing t-test on every coefficient we can exclude coefficient ma3 as insignificant because absolute t-value of that coefficient is close to 1 then rejecting H_0 in t-test.
+
+```{r}
+(mod2<-arima(lnserie, order=c(0,1,2), seasonal = list(order=c(3,1,0), period=12)))
+```
+
+After removing that coefficient, we can see AIC metric got smaller which is good indication that model is fitting better to the data. Also, model has fewer parameters which improves computation speed. Removing it we obtain model $ARIMA(0,1,2)(3,1,0)_{12}$
+
+## Validation
+
+### Model 1
+
+The model we are going to validate is $ARIMA(2,1,0)(0,1,2)_{12}$.
+
+#### Causality and invertibility
+
+
+To check causality AR part of model is observed. To check invertibility MA part of model is observed. For both parts, the roots of characteristic equation must be computed and need to lie outside the unit circle (have modulus > 1).
+
+
+```{r, echo=FALSE}
+cat("\nModulus of AR roots are", Mod(polyroot(c(1,-mod1$model$phi))))
+moduli <- Mod(polyroot(c(1, mod1$model$theta)))
+u <- unique(round(moduli, 4))
+cat("\nUnique modulus of MA roots are", u)
+```
+
+All modulus of AR and MA part have modulus above 1 meaning that this model is **casual** and **invertible**.
+
+#### Homoscedasticity
+
+```{r, echo=FALSE}
+resi=resid(mod1)
+plot(resi, ylim=c(-4*sd(resi),4*sd(resi))) # one outlier maybe
+abline(h=0)
+abline(h=c(-3*sd(resi),3*sd(resi)), lty=3, col=4)
+```
+
+Observing residuals plot we can see only one is crossing the confidence band around 2017. However, having only one "crossing" we **can assume** that residuals are homoscedastic.
+
+```{r, echo=FALSE}
+scatter.smooth(sqrt(abs(resi)), lpars=list(col=2)) # should be flat red line
+```
+
+This square root of absolute residuals plot also proves that variance **is constant** as in theory the red line should be flat and we can only see slight increase during years.
+
+#### Normality
+
+```{r, echo=FALSE}
+library(nortest)
+library(tseries)
+# to test the normality
+qqnorm(resi)
+qqline(resi, col=2, lwd=2)
+```
+
+The residuals follow theoretical Q-Q line. We can say only one residual probably does not follow the line but vast majority of them do.
+
+```{r, echo=FALSE}
+hist(resi, breaks=8, freq=FALSE)
+curve(dnorm(x, mean=mean(resi), sd=sd(resi)), col=2, add=T)
+```
+
+Histogram also shows that residuals follow superimposed normal curve but this is not the most reliable way to test normality as it depends on how many breaks does the histogram have.
+
+```{r, echo=FALSE}
+# Shapiro-Wilk
+shapiro.test(resi) # p<0.05 reject normality
+# Anderson-Darling
+ad.test(resi)
+# Jarque Bera
+jarque.bera.test(resi)
+```
+
+All the normality tests have p-value larger than 0.05 which means we keep H_0 which in those tests states that the residuals follow normal distribution.
+
+Combining all the ways to test normality, we can conclude that the residuals **follow normal distribution**.
+
+#### Independence
+
+```{r}
+# independence
+par(mfrow=c(1,2))
+acf(resi,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(2,rep(1,11)))
+pacf(resi,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(rep(1,11),2))
+par(mfrow=c(1,1))
+```
+
+From the ACF/PACF of residuals we can see that some lags are crossing the confidence band representing autocorrelation between residuals and their lagged values. 
+
+```{r}
+tsdiag(mod1,gof.lag=72)
+```
+
+More insight in independence of residuals we can get from Ljung-Box test. Observing p-values of lags we can see a lot of them have p-value below 0.05 then rejecting H_0 which says lags are independent. With those results, we can assume that residuals **are not independent**. 
+
+Because of that, this model cannot be validated. Problem could probably be solved with removing outliers, adding more differencing or adding higher order AR or MA terms.
+
+#### Forecasting
+
+```{r}
+AIC1=AIC(mod1)
+BIC1=BIC(mod1)
+cat("AIC of model1 is", AIC1)
+cat("\nBIC of model1 is", BIC1)
+
+```
+
+```{r}
+ultim=c(2017,12)
+lnserie2=window(lnserie, end=ultim)
+```
+
+Original model 1
+
+```{r}
+mod1
+```
+
+
+Model 1 without last 12 observations
+
+```{r}
+(mod1b<-arima(lnserie2,order=c(2,1,0),seasonal=list(order=c(0,1,2),period=12)))
+```
+
+Here we can see difference between original model and the model without last 12 observations.
+
+```{r}
+cat("\nModulus of AR roots of mod1b are", Mod(polyroot(c(1,-mod1b$model$phi))))
+moduli <- Mod(polyroot(c(1, mod1b$model$theta)))
+u <- unique(round(moduli, 4))
+cat("\nUnique modulus of MA roots of mod1b are", u)
+```
+
+Observing modulus of AR and MA roots as well as sign of coefficients and absolute t-values for them we can see that the model without last 12 observations is still **stable**.
+
+```{r}
+pre<-predict(mod1b, n.ahead=12)
+ll<-exp(pre$pred-1.96*pre$se)
+ul<-exp(pre$pred+1.96*pre$se)
+pr<-exp(pre$pred)
+
+ts.plot(serie,pr,ll,ul,lty=c(1,1,3,3),col=c(1,2,4,4),type="o", xlim=c(2015,2019))
+abline(v=2015:2019, lty=3, col=4)
+```
+
+Red line represents predicted last 12 values based on the model without them. The original values are represented by black line. Two blue lines, upper limit and lower limit, represent 95% confidence interval. We can see that predicted values are similar to the original ones proving that the model trained without last 12 observations is generalized and can predict really accurate values.
+
+```{r, echo=FALSE}
+cat("The predictions values are\n")
+pr
+obs<-window(serie,start=2018)
+cat("\nThe original values are\n")
+obs
+```
+
+
+```{r, echo=FALSE}
+RMSE1=sqrt(mean((obs-pr)^2))
+MAE1=mean(abs(obs-pr))
+
+RMSPE1=sqrt(mean(((obs-pr)/obs)^2))
+MAPE1=mean(abs((obs-pr)/obs))
+
+#good values
+cat("\n\nRMSE of the model1 is", round(RMSE1,2))
+cat("\nMAE of the model1 is", round(MAE1,2))
+cat("\nRMSPE of the model1 is", round(RMSPE1,4))
+cat("\nMAPE of the model1 is", round(MAPE1,4))
+mCIL1=mean(ul-ll)
+cat("\nWidth of prediction confidence interval of model1 is", round(mCIL1,2))
+```
+
+Really low values of RMSPE and MAPE prove that model has a good fit and with this model we could predict further values as well.
+
+
+### Model 2
+
+The model we are going to validate is $ARIMA(0,1,2)(3,1,0)_{12}$.
+
+#### Causality and invertibility
+
+```{r, echo=FALSE}
+moduli <- Mod(polyroot(c(1, -mod2$model$phi)))
+u <- unique(round(moduli,4))
+cat("\nUnique modulus of AR roots are", u)
+cat("\n\nModulus of MA roots are", Mod(polyroot(c(1, mod2$model$theta))))
+```
+
+As well as in first model, the roots of characteristic polynomials are greater than 1 showing that the model is **casual** and **invertible**.
+
+#### Homoscedasticity
+
+```{r, echo=FALSE}
+resi2=resid(mod2)
+plot(resi2, ylim=c(-4*sd(resi),4*sd(resi))) # variance seems to be constant but there is clearly outliers 
+abline(h=0)
+abline(h=c(-3*sd(resi2),3*sd(resi2)), lty=3, col=4)
+```
+
+Observing the residuals plot variance seems to be constant but in this case the second model has one more residuals that is crossing the confidence band around 2006. Both models seems to have larger variance coming to the end of observation period.
+
+```{r, echo=FALSE}
+scatter.smooth(sqrt(abs(resi2)), lpars=list(col=2)) # should be flat red line
+```
+
+That is also proved for second model using the smoothing line having increase and larger values at the end. Even with that in mind, those increases are small and do not have large influence. Second model is also **homoscedastic** having constant variance.
+
+#### Normality
+
+```{r, echo=FALSE}
+# to test the normality
+qqnorm(resi2)
+qqline(resi2, col=2, lwd=2)
+```
+
+Residuals of second model follow the theoretical Q-Q line despite having lerger number of "unfollowers". We could assume that those residuals do not follow normal distribution as well as the residuals of first model.
+
+```{r, echo=FALSE}
+hist(resi2, breaks=8, freq=FALSE)
+curve(dnorm(x, mean=mean(resi2), sd=sd(resi2)), col=2, add=T)
+```
+
+Histogram of those residuals show normality in the residuals distribution but we can not rely on this method.
+
+```{r, echo=FALSE}
+# Shapiro-Wilk
+shapiro.test(resi2) # p<0.05 reject normality
+# Anderson-Darling
+ad.test(resi2)
+# Jarque Bera
+jarque.bera.test(resi2)
+```
+
+Residuals fail one of three test for normality having p-value of Anderson-Darling normality test less than 0.05 rejecting the normality hypothesis. Other two test show the opposite as they do not reject that hypothesis.
+
+With all those results, we can say the residuals **do follow normal** distribution but not as well as the residuals of first model. 
+
+#### Indepedence
+
+```{r, echo=FALSE}
+# independence
+par(mfrow=c(1,2))
+acf(resi2,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(2,rep(1,11)))
+pacf(resi2,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(rep(1,11),2))
+par(mfrow=c(1,1))
+```
+
+From the ACF/PACF of residuals we can see some lags that are crossing the confidence band showing there is some autocorrelation.
+
+```{r, echo=FALSE}
+tsdiag(mod2,gof.lag=72)
+```
+
+Further proof of that is is p-value of Ljung-Box test that are showing for almost all lags p-value lower than 0.05. This results shows us the residuals **are not independent** and **can not** be validated.
+
+We should further check the model's parameters or treat outliers and after that perform test for independence again.
+
+#### Forecasting
+
+```{r, echo=FALSE}
+AIC2=AIC(mod2)
+BIC2=BIC(mod2)
+cat("AIC of model2 is", AIC2)
+cat("\nBIC of model2 is", BIC2)
+```
+
+```{r, echo=FALSE}
+ultim=c(2017,12)
+lnserie2=window(lnserie, end=ultim)
+```
+
+Original model 2
+
+```{r, echo=FALSE}
+mod2
+```
+
+Model 2 without last 12 observations
+
+```{r, echo=FALSE}
+(mod2b<-arima(lnserie2,order=c(0,1,2),seasonal=list(order=c(3,1,0),period=12)))
+```
+
+For the forecasting of last 12 observations we will use model trained on all observation except the last 12. The parameters and absolute t-values of this model are very similar to the original model showing that the model is **stable**.
+
+```{r, echo=FALSE}
+pre2<-predict(mod2b, n.ahead=12)
+ll2<-exp(pre2$pred-1.96*pre2$se)
+ul2<-exp(pre2$pred+1.96*pre2$se)
+pr2<-exp(pre2$pred)
+
+ts.plot(serie,pr2,ll2,ul2,lty=c(1,1,3,3),col=c(1,2,4,4),type="o", xlim=c(2015,2019))
+abline(v=2015:2019, lty=3, col=4)
+```
+
+The predictions of trained model represented by the red line are very similar to the original observations represented by the black line as we can see that on the graph.
+
+```{r, echo=FALSE}
+cat("The predictions values are\n")
+pr2
+obs<-window(serie,start=2018)
+cat("\nThe original values are\n")
+obs
+```
+
+
+```{r, echo=FALSE}
+RMSE2=sqrt(mean((obs-pr2)^2))
+MAE2=mean(abs(obs-pr2))
+
+RMSPE2=sqrt(mean(((obs-pr2)/obs)^2))
+MAPE2=mean(abs((obs-pr2)/obs))
+
+#good values
+cat("\n\nRMSE of the model2 is", round(RMSE2,2))
+cat("\nMAE of the model2 is", round(MAE2,2))
+cat("\nRMSPE of the model2 is", round(RMSPE2,4))
+cat("\nMAPE of the model2 is", round(MAPE2,4))
+mCIL2=mean(ul2-ll2)
+cat("\nWidth of prediction confidence interval of model2 is", round(mCIL2,2))
+```
+
+The model metrics of the second model are also acceptable for further forecasting but they are bit worse then the first model.
+
+### Comparison
+
+```{r, echo=FALSE}
+res=data.frame(
+        parameters=c(length(coef(mod1)),length(coef(mod2))),
+        sigma2=c(mod1$sigma2,mod2$sigma2),
+        AIC=c(AIC1,AIC2),
+        BIC=c(BIC1,BIC2),
+        RMSE=c(RMSE1,RMSE2),
+        MAE=c(MAE1,MAE2),
+        RMSPE=c(RMSPE1*100,RMSPE2*100),
+        MAPE=c(MAPE1*100,MAPE2*100),
+        CIml=c(mCIL1,mCIL2)
+        )
+row.names(res)=c("ARIMA(2, 1, 0)(0, 1, 2)_12","ARIMA(0, 1, 2)(3, 1, 0)_12")
+res_t <- t(res)
+colnames(res_t) <- c("ARIMA(2,1,0)(0,1,2)_12", "ARIMA(0,1,2)(3,1,0)_12")
+options(scipen=999) 
+res_t
+```
+Residuals of both models are **casual**, **invertible**, **homoscedastic**. For the first model all normality test have p-value greater than 0.05, but for second model one test have value less than 0.05 showing that **first model** follows normal distribution better. Residuals of both models **are not independent**. First model has **less parameters**, **lower** AIC, RMSPE and MAPE but **larger** length of prediction interval. Both models perform good in forecasting but they is slight difference between them. 
+
+Having all of that in mind, it is better to choose **first model**, $ARIMA(2,1,0)(0,1,2)_{12}$,  for further forecasting and outlier detection as it has slightly better performance in predicitions and less parameters in original model.
+
+## Forecasting
+
+
+```{r, echo=FALSE}
+pre3<-predict(mod1, n.ahead=12)
+ll3<-exp(pre3$pred-1.96*pre3$se)
+ul3<-exp(pre3$pred+1.96*pre3$se)
+pr3<-exp(pre3$pred)
+
+ts.plot(serie,pr3,ll3,ul3,lty=c(1,1,3,3),col=c(1,2,4,4),type="o", xlim=c(2016,2020))
+abline(v=2015:2020, lty=3, col=4)
+```
+
+Long-term forecast (red line) for year 2019 shows similar seasonal pattern as the for the previous years. Blue lines represent 95% confidence interval for those predictions. 
+
+```{r, echo=FALSE}
+cbind(ll3,pr3,ul3)
+```
+
+
+```{r, echo=FALSE}
+cat("\nMean confidence interval for next year(2020) is", mean(ul3-ll3))
+```
+
+It can be said the model 1 is **robust** enough for the predictions in the future.
+
+## Outlier Treatment
+
+### Automatic outlier detection
+
+```{r}
+source("atipics2.r")
+```
+
+```{r}
+mod.atip=outdetec(mod1,dif=c(1,12),crit=2.7,LS=T)
+atipics=mod.atip$atip[order(mod.atip$atip[,1]),]
+meses=c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+data.frame(atipics,
+           Fecha=paste(meses[(atipics[,1]-1)%%12+1],start(lnserie)[1]+((atipics[,1]-1)%/%12)),
+           PercVar=exp(atipics[,3])*100)
+```
+
+In this table we can see all **14 outliers** that are present in the dataset based on the first model. We must be taking in the context that criterion for selecting is setted at 2.7. If we set that criterion to lower value we would have more outliers. That criterion is usually set from 2.6 to 2.9.
+
+There are **three** types of outlier, AO - additive outlier, LS - level shift and TC - temporary change.
+Our main focus will be on LS outliers as they changed the mean of the series to a new one. TC also changes the mean but after some time it goes back to the original one and AO is just slight outlier happening in one month and not longer.
+
+There are **three** level shifts in presented outliers at **Nov 2001, Mar 2002 and Dec 2009.**
+The first two happened because of the same incident which was **Twin Towers incident in 2001** which forced air travel ban and industrial cutbacks. By the next year around March U.S. economy was rebuilding and reconstructing.
+
+The third and last one happened in the winter year after **great depression in 2008**. Because of the financial crisis the industrial activity was reduced but after initial reduction, it increased in the year after which happens to be last level shift.
+
+```{r}
+lnserie.lin=lineal(lnserie,mod.atip$atip)
+serie.lin=exp(lnserie.lin)
+
+# in black what we observed, in red without outliers
+plot(serie)
+lines(exp(lnserie.lin),col=2)
+```
+
+Red line represent what would the series look like without computed outliers in comparison to original observations. We can see slight difference between two series as because of the level shifts outliers having impact on the observations.
+
+```{r}
+# difference between the original and without outliers
+plot(lnserie-lnserie.lin)
+```
+
+This plot represents impact of outliers on the original series. Three LS are clearly seen, 2001 and 2009, as well other outliers which are not that impactful as level shifts. Those shift changed the mean of the series which can be seen on the plot by observing straight lines in time. Short spikes represent AO outliers and similar to those spikes but taking more time are the TC outliers.
+
+### Re-estimation
+
+```{r}
+(mod1lin=arima(lnserie.lin,order=c(2,1,0),
+              seasonal=list(order=c(0,1,2),period=12)))
+```
+
+All the coeficients of the new model adjusted to the outliers are **significant.**
+
+### Re-validation
+
+```{r, echo=FALSE}
+cat("\nModulus of AR roots are", Mod(polyroot(c(1, -mod1lin$model$phi))))
+moduli <- Mod(polyroot(c(1, mod1lin$model$theta)))
+u <- unique(round(moduli, 4))
+cat("\n\nUnique modulus of MA roots are", u)
+```
+
+The roots of AR and MA part are greater than 1 making model **casual** and **invertible**.
+
+```{r}
+resilin=resid(mod1lin)
+
+plot(resilin, ylim=c(-4*sd(resilin),4*sd(resilin)))
+abline(h=0)
+abline(h=c(-3*sd(resilin),3*sd(resilin)),lty=3,col=4)
+
+scatter.smooth(sqrt(abs(resilin)), lpars=list(col=2))
+```
+
+Adjusted model performs has **more constant variance** as not one residuals crosses confidence band but we can also see a slight increase in variance over time.
+
+```{r}
+qqnorm(resilin)
+qqline(resilin,col=2,lwd=2)
+
+hist(resilin,breaks=8, freq=FALSE)
+curve(dnorm(x, mean=mean(resilin), sd=sd(resilin)), col=2, lwd=2, add=T)
+
+# Shapiro-Wilk
+shapiro.test(resilin) # p<0.05 reject normality
+# Anderson-Darling
+ad.test(resilin)
+# Jarque Bera
+jarque.bera.test(resilin)
+
+```
+
+All the plots and test show the residuals **follow** normal distribution. Observing the Q-Q plot it can be said that the residuals of adjusted model follow the normal distribution better than the pre-adjusted models.
+
+```{r}
+par(mfrow=c(1,2))
+acf(resilin,ylim=c(-1,1),lag.max=72,col=c(2,rep(1,11)),lwd=2)
+pacf(resilin,ylim=c(-1,1),lag.max=72,col=c(rep(1,11),2),lwd=2)
+par(mfrow=c(1,1))
+
+tsdiag(mod1lin,gof.lag=72)
+```
+
+As well as models before even with adjusting the model with outliers residuals **are not independent** as the p-values of Ljung-Box are below 0.05 rejecting normality hypothesis. Same conlusion could be concluded from ACF/PACF plots as there are multiple lags crossing the confidence band.
+
+```{r}
+AIC3=AIC(mod1lin)+2*nrow(mod.atip$atip)
+BIC3=BIC(mod1lin)+log(length(serie)**nrow(mod.atip$atip))
+cat("AIC of adjusted model is", AIC3)
+cat("\nBIC of adjusted model is", BIC3)
+```
+
+### Re-forecasting
+
+```{r}
+ultim=c(2017,12)
+serie.lin2=window(serie.lin, end=ultim)
+lnserie.lin2=log(serie.lin2)
+```
+
+Original adjusted model 1
+
+```{r}
+mod1lin
+```
+
+Adjusted model 1 without 12 last observations
+
+```{r}
+(mod1lin2=arima(lnserie.lin2,order=c(2,1,0),
+              seasonal=list(order=c(0,1,2),period=12)))
+```
+
+Adjusted model without last 12 observations is also stable as the coefficients and absolute t-values are similar to the original adjusted model so we can use it for forecasting.
+
+```{r}
+pre=predict(mod1lin2,n.ahead = 12)
+# computing weight of LS
+wLS=sum(mod.atip$atip[mod.atip$atip[,2]=="LS",3])
+
+ll=exp(pre$pred+wLS-1.96*pre$se)
+pr=exp(pre$pred+wLS)
+ul=exp(pre$pred+wLS+1.96*pre$se)
+
+ts.plot(serie,ll,ul,pr,
+        lty=c(1,2,2,1),
+        col=c(1,4,4,2),
+        xlim=c(2015,2019), type="o")
+abline(v=2015:2019,lty=3,col=4)
+```
+
+After comparing predictions using the adjusted model with previous ones we can see that the predictions are **more similar** to the original ones then with two models before. Also the confidence interval seems narrower which shows greater precision, less uncertainty around the forecast and stronger information. 
+
+```{r}
+obs=window(serie,start=2018)
+RMSE3=sqrt(mean((obs-pr)^2))
+MAE3=mean(abs(obs-pr))
+RMSPE3=sqrt(mean(((obs-pr)/obs)^2))
+MAPE3=mean(abs(obs-pr)/obs)
+mCIL3=mean(ul-ll)
+```
+
+## Comparison of three models
+
+```{r}
+res=data.frame(
+        par=c(length(coef(mod1)),length(coef(mod2)),length(coef(mod1lin))+nrow(mod.atip$atip)),
+        sigma2=c(mod1$sigma2,mod2$sigma2,mod1lin$sigma2),
+        AIC=c(AIC1,AIC2,AIC3),
+        BIC=c(BIC1,BIC2,BIC3),
+        RMSE=c(RMSE1,RMSE2,RMSE3),
+        MAE=c(MAE1,MAE2,MAE3),
+        RMSPE=c(RMSPE1,RMSPE2,RMSPE3),
+        MAPE=c(MAPE1,MAPE2,MAPE3),
+        CIml=c(mCIL1,mCIL2,mCIL3)
+        )
+row.names(res)=c("ARIMA (model1)","ARIMA (model2)","ARIMA+OutTreat (model1)")
+res
+```
+
+Simple model 1 is the **simplest** model, only **4** parameters, and had **lowest** forecast errors, RMSE/MAE/RMSPE/MAPE so it is the best on 1-year prediction.
+
+The outlier adjusted model 1 has a **lot lower AIC/BIC** and residual variance (sigma2) which is proof of accounting for level shifts and other outliers as it gives much better likelihood fit. The **drawback** is the it has 18 parameters (4 parameters of model 1 + 14 parameters for 14 outliers).
+
+Model 2 has **narrowest** average confidence interval, but its variance errors are larger.
+
+# Conclusions and Discussion
+
+The goal of this data analysis was to generate forecast based on last observation using the Box-Jenkins methodology through different ARIMA models. It also includes outlier treatment of one selected model. After generating forecast seasonal-ARIMA models were compared against each other in order to figure out which one is the best to predict U.S. monthly primary-energy demand one year ahead.  
+
+Three models were compared:
+
+* **Model 1** – $ARIMA(2,1,0)(0,1,2)_{12}$ (4 coefficients)  
+*Best pure forecast*: lowest RMSPE = 1.8% and MAPE = 1.3 %. AIC = –1591.  
+
+* **Model 2** – $ARIMA(0,1,2)(3,1,0)_{12}$ (5 coefficients)  
+Narrowest prediction interval but higher error (RMSPE = 2.5%, MAPE = 2.3 %). AIC = –1575.
+
+* **Model 1 + outlier treatment** 
+
+Same structure as Model 1 plus 14 LS/AO/TC outlier treatmeant (18 coefficients)  
+
+Gives the best in-sample likelihood (AIC = –1696) and lowest variance, but its one year forecast error lands between the first two models
+
+All three pass causality and invertibility checks (roots outside the unit circle) but none completely remove residual autocorrelation (Ljung-Box p < 0.05).
+
+## Strengths and weaknesses at a glance
+
+| aspect | Model 1 | Model 2 | Model 1 + OT |
+|--------|---------|---------|--------------|
+| Forecast accuracy | Best | Worst | Medium |
+| Prediction interval width | Wide | Narrowest | Medium |
+| Simplicity (coefficients) | 4 | 5 | 18 |
+| Homoscedasticity | **Yes** | **Yes** | **Yes** |
+| Normality | **Yes** | **Yes (2/3)** (one test fails) | **Yes** |
+| Residual independence | **No** | **No** | **No** |
+| Causal / Invertible | **Yes / Yes** | **Yes / Yes** | **Yes / Yes** |
+
+## Final conclusion
+
+The objective of project **was met** as three ARIMA models were able to generate reliable forecasts that are similar to the original values. All models had really small RMSPE and MAPE which proves that point. 
+
+For further forecasting the plain $ARIMA(2,1,0)(0,1,2)_{12}$ is **recommended** as it is accurate and has smallest number of parameters. Outlier adjusted model improves the model fit but at the cost of 14 extra parameters without fixing the residual dependence issue. Model 2 offers the tightest confidence bands yet makes larger point-errors.
+
+Future work should focus on **fixing the remaining autocorrelation** by adding extra AR/MA lags which could make model fit worse or including calendar effects (holidays, working days, etc.) into a consideration.

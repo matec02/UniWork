@@ -1,13 +1,13 @@
-# 🎓 University Work Repository
+# 🎓 University Work Repository - Matija Jakovac
 
 Welcome to my academic portfolio! This repository showcases a collection of projects and coursework completed during 
-my studies at the **Faculty of Electrical Engineering and Computing, University of Zagreb** and 
-**Facultad de Informática de Barcelona, Universitat Politècnica de Catalunya**.
+my studies at the home university - **Faculty of Electrical Engineering and Computing, University of Zagreb** and Erasmus
+exchange university - **Facultad de Informática de Barcelona, Universitat Politècnica de Catalunya**.
 
 The repository is structured by level of study:
 
-- **Undergraduate (Bachelor)**
-- **Graduate (Master)**
+- **Bachelor (Computing)**
+- **Master (Computer Science)**
 
 Each level is divided by **year**, then **semester**, and finally by **individual classes**.
 
@@ -15,40 +15,59 @@ Each level is divided by **year**, then **semester**, and finally by **individua
 
 ## 🌟 Notable Projects
 
+📁 *Note: PDF reports for these projects are located in a separate folder in the root directory (`/NotableProjects`).  
+Additional materials (code, data, documentation) are placed in the corresponding course folders.*
+
 Here are some highlights from the coursework:
 
-- **📊 Statistical Data Analysis**  
-  Research into the connection between personality traits and physical characteristics  
-  *Undergraduate – Year 3, Semester 1*
+- **📘 Bachelor Thesis**  
+  - Satellite Image Analysis for Forest Species Classification  
+  *(available in the root directory)*
 
-- **🎮 Algorithmic Game Theory**  
-  The Contest Game for crowdsourcing reviews  
-  *Graduate – Year 1, Semester 2*
+- **🛴 Software Engineering**
+  - Web application for renting scooters
+  - Built with Spring Boot (backend) and React (frontend); led as full-stack team lead
+  - Team of 7 students  
+    *Undergraduate – Year 3, Semester 5*
 
-- **📈 Data Analysis**
-    - Time Series Analysis
-    - Multivariate Analysis  
-      *Graduate – Year 1, Semester 2*
+- **🧬 Digital Image Processing and Analysis**
+  - Liver tumor segmentation from medical imagery
+  - Data preprocessing, segmentation pipeline, and evaluation
+  - Team of 5 students  
+    *Undergraduate – Year 3, Semester 6*
 
 - **🧠 Data Mining**
-    - Supervised Learning Methods
-    - Statistical Approaches  
-      *Graduate – Year 1, Semester 2*
+  - Supervised Learning Methods - Diabetes classification based on health attributes
+  - Statistical Approaches - Car sales in US states
+  - Team of 5 students  
+    *Graduate – Year 1, Semester 2*
 
-- **⚙️ Multiprocessor Architecture**  
-  MPI in Distributed Training  
+- **📈 Data Analysis**
+  - Time Series Analysis - Energy consumption in United States of America
+  - Multivariate Analysis - Nutrition Study - Team of 3 students  
+    *Graduate – Year 1, Semester 2*
+
+- **📊 Statistical Data Analysis**  
+  - Research into the connection between personality traits and physical characteristics  
+  - Team of 4 students  
+  *Undergraduate – Year 3, Semester 5*
+
+- **🎮 Algorithmic Game Theory**
+  - Poster - The Contest Game for Crowdsourcing Reviews  
+  - Team of 3 students  
   *Graduate – Year 1, Semester 2*
 
-- **📘 Bachelor Thesis**  
-  Satellite Image Analysis for Forest Species Classification  
-  *(available in the root directory)*
+- **⚙️ Multiprocessor Architecture**  
+  - Project - MPI in Distributed Training 
+  - Team of 2 students  
+  *Graduate – Year 1, Semester 2*
 
 ---
 
 ## 🌐 Language Note
 
-- Most projects are written in **Croatian**.
-- Projects from **Graduate – Year 1, Semester 2** are in **English**, as they were done during my Erasmus exchange.
+- Projects from **Graduate – Year 1, Semester 2** are written in **English**, as they were completed during my Erasmus exchange.
+- All other coursework, documentation, and materials are written in **Croatian**.
 
 ---
 

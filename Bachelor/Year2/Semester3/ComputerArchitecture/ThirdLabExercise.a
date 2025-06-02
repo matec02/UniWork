@@ -1,0 +1,105 @@
+        
+glavni          addi sp, x0, 0x100              ;inicijalizacija stoga
+                slli sp, sp, 8
+                lui x18, %hi(0xFFFF0F00)
+                addi x18, x18, %lo(0xFFFF0F00)  ;inicijalizacija stoga
+                lui x19, %hi(izv)
+                addi x19, x19, %lo(izv)         ;ucitavanje adrese izvorista
+                addi a1, x0, 0x0d
+                jal ra, lcdwr                   ;brisanje lcda
+                lw x10, 0(x19)
+                jal ra, pretvori                ;poziv potprograma
+                halt
+
+
+
+pretvori        addi sp, sp, -4
+                sw ra, 0(sp)                    ;ucitavanja konteksta ra zbog poziva potprograma u potprogramu
+doso100         addi x21, x0, 100               ;ako je broj veci od 100 ulazi ovdje
+                bltu x10, x21, doso90
+                addi a1, x0, 0x43               ;C
+                jal ra, lcdwr
+                addi x10, x10, -100             ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso100
+doso90          addi x21, x0, 90                ;ako je broj veci od 90 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso50
+                addi a1, x0, 0x58               ;X
+                jal ra, lcdwr
+                addi a1, x0, 0x43               ;C
+                jal ra, lcdwr
+                addi x10, x10, -90              ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso90
+doso50          addi x21, x0, 50                ;ako je broj veci od 50 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso40
+                addi a1, x0, 0x4c               ;L
+                jal ra, lcdwr
+                addi x10, x10, -50              ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso50
+doso40          addi x21, x0, 40                ;;ako je broj veci od 40 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso10
+                addi a1, x0, 0x58               ;X
+                jal ra, lcdwr
+                addi a1, x0, 0x4c               ;L
+                jal ra, lcdwr
+                addi x10, x10, -40              ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso40
+doso10          addi x21, x0, 10                ;ako je broj veci od 10 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso9
+                addi a1, x0, 0x58               ;X
+                jal ra, lcdwr
+                addi x10, x10, -10              ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso10
+doso9           addi x21, x0, 9                 ;ako je broj veci od 9 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso5
+                addi a1, x0, 0x49               ;I
+                jal ra, lcdwr
+                addi a1, x0, 0x58               ;X
+                jal ra, lcdwr
+                addi x10, x10, -9               ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso9
+doso5           addi x21, x0, 5                 ;ako je broj veci od 5 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso4
+                addi a1, x0, 0x56               ;V
+                jal ra, lcdwr
+                addi x10, x10, -5               ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso5
+doso4           addi x21, x0, 4                 ;ako je broj veci od 4 a manji od prijasnjeg ispitivanja ulazi ovdje
+                bltu x10, x21, doso1
+                addi a1, x0, 0x49               ;I
+                jal ra, lcdwr
+                addi a1, x0, 0x56               ;V
+                jal ra, lcdwr
+                addi x10, x10, -4               ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso4
+doso1           addi x21, x0, 1                 ;ako je broj veci od 1 a manji od prijasnjeg ispitivanja ulazi ovdje
+                addi a1, x0, 0x49               ;I
+                jal ra, lcdwr
+                addi x10, x10, -1               ;oduzimanje vrijednosti od broja jednako onoj koja ce biti zapisana na lcd
+                beq x10, x0, krajpotp           ;ako je vrijednost jednaka 0 pretvroba je gotova
+                bgeu x10, x21, doso1
+krajpotp        addi a1, x0, 0x0a
+                jal ra, lcdwr
+                lw ra, 0(sp)
+                addi sp, sp, 4
+                jalr x0, 0(ra)
+
+lcdwr           andi a1,a1,0x7F                 ;klasican zapis na lcd
+                sb a1, 4(x18)
+                ori a1,a1,0x80
+                sb a1, 4(x18)
+                andi a1,a1,0x7F 
+                sb a1, 4(x18)
+                jalr x0, 0(ra)
+
+        
+        org 0x500                               ;adresa brojeva koje treba pretvoriti
+izv     dw 88
+

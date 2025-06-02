@@ -1,0 +1,391 @@
+---
+title: "Validation of a model"
+author: "Matija Jakovac"
+date: "2025-03-16"
+output: html_document
+---
+
+In this homework, following time series will be used:
+
+**AeronausMAD**: Monthly number of international flight aircraft at Madrid-Barajas Airport (MAD)
+since January 1990 ending in December 2019
+
+```{r, echo=FALSE}
+setwd("C:/Users/Matija Jakovac/Documents/FAKS/ERASMUS/AD")
+serie=ts(read.csv("AeronausMAD.csv", header = FALSE), start=c(1990,1), end = c(2019, 12) ,freq=12)
+
+plot(serie)
+lnserie=log(serie)
+monthplot(lnserie)
+
+d12lnserie=diff(lnserie,12)
+d1d12lnserie=diff(d12lnserie)
+plot(d1d12lnserie)
+```
+
+For this series (on a logarithmic scale), we propose the following models:
+
+1. $ARIMA(0, 1, 3)(0, 1, 1)_{12}$ without constant
+
+2. $ARIMA(2, 1, 1)(1, 1, 1)_{12}$ without constant
+
+For given time series the data was differenced as given in the task, the regular difference is d=1 and the seasonal difference is also D=1. Monthplot is provided as to see there is some seasonal pattern happening and on the second plot it is visible that the mean in constant when apply one non-seasonal and one seasonal difference.
+
+
+```{r, echo=FALSE}
+cat("Variance of log-transformed original (d=0,D=0) series:", var(lnserie), "\n")
+cat("Variance of after seasonal differencing (d=0,D=1) at lag=12:", var(d12lnserie), "\n")
+cat("Variance of after first non-seasonal (d=1,D=1) differencing:", var(d1d12lnserie), "\n")
+cat("Variance of after additional non-seasonal (d=2,D=1) differencing:", var(diff(d1d12lnserie)), "\n")
+```
+
+The proof that data is differenced as it should be is comparing the variance of different scales od *d* and *D*. The lowest variance is exactly for the d=1 and D=1 as provided in the task.
+
+Model 1) $ARIMA(0, 1, 3)(0, 1, 1)_{12}$
+
+As provided in task models do not have constant so that means the model can be automatically checked for significant coefficients with logarithmic scale of time series.
+
+```{r, echo=FALSE}
+(mod1<-arima(lnserie,order=c(0,1,3),seasonal=list(order=c(0,1,2),period=12)))
+```
+
+From the provided output, the coefficients ma2 and ma3 have absolute t-value lower than 2, abs(t-value(ma2))=0.94 and abs(t-value(ma2))=1.25, meaning they are probably non-significant. The following model can than be provided $ARIMA(0, 1, 1)(0, 1, 1)_{12}$.
+
+```{r, echo=FALSE}
+(mod1<-arima(lnserie,order=c(0,1,1),seasonal=list(order=c(0,1,1),period=12)))
+```
+
+Removing those two non-significant coeff. the model has lower AIC meaning it has better performance with fewer arguments which is always good. For that model, the validation is shown below.
+
+*1. Using the characteristic polynomials of the AR and MA components, calculate the modulus of their roots. Is the estimated model causal? Is it invertible?
+*
+
+```{r, echo=FALSE}
+cat("The following characteristic polynomial can be provided for AR part of model: ", c(1,-mod1$model$phi))
+
+cat("\nThe following characteristic polynomial can be provided for MA part of model: ",c(1,mod1$model$theta)) # 
+```
+
+To check causality AR part of model is observed. As model does not have AR part, it is logical that the model is **casual**. 
+To check invertibility MA part of model is observed. For that part, the roots of characteristic equation must be computed and need to lie outside the unit circle (have modulus > 1).
+
+```{r, echo=FALSE}
+cat("\nModulus of MA roots are", Mod(polyroot(c(1, mod1$model$theta))))
+```
+
+All modulus of MA part have modulus above 1 meaning that this model is **invertible**.
+
+*2. Plot the residuals and the square root of the absolute residuals with a smoothing adjustment.
+Can we assume that variance is constant?*
+
+```{r, echo=FALSE}
+resi=resid(mod1)
+plot(resi) # variance seems to be constant but there is clearly outliers 
+abline(h=0)
+abline(h=c(-3*sd(resi),3*sd(resi)), lty=3, col=4)
+scatter.smooth(sqrt(abs(resi)), lpars=list(col=2)) # should be flat red line
+```
+
+Observing two provided plots, residuals plot and square root of the absolute residuals with a smoothing adjustment we **can not** assume the variance is constant. In the residuals plot we see some periods where variance is higher, at the beginning and around 2000. We can assume that is because of presence of outliers and because of that some resiudals are not in the interval. After 2003, we can see the variance is decreasing having only one critical value around 2012. 
+On the second plot we can also come to conclusion that variance is decreasing as smoothing line is showing downward trend. If the variance was constant then the red smoothing line would be flat not showing any anomalies. 
+In conclusion, we cannot fully assume that the variance is constant. In some period it is constant but globally it is not.
+
+*3. Generate the normality plot and the histogram with the normal curve superimposed. Apply
+the Shapiro-Wilk test to the residuals. Can we assume that residuals follow a normal distribution?*
+
+```{r, echo=FALSE}
+# to test the normality
+qqnorm(resi)
+qqline(resi, col=2, lwd=2) 
+hist(resi, breaks=20, freq=FALSE)
+curve(dnorm(x, mean=mean(resi), sd=sd(resi)), col=2, add=T)
+shapiro.test(resi) # p<0.05 reject normality
+```
+
+Observing normality plot (Q-Q plot) it is visible that some residuals do not follow normality line. We can come to conclusion that residuals **do not** follow the normal distribution. With the pattern shown in Q-Q plot, we could assume the model is volatile.
+Non-normality is also visible on histogram because some breaks do not follow the line of normal distribution. The specific one that is clearly out of line is the one break right after 0.00. 
+The last reason showing the model does not follow normal distribution is Shapiro-Wilk test on residuals. H_0 of the test is that the data is normally distributed. Having p-value lower than 0.05 we reject H_0 which means residuals do not follow normal distribution.
+
+*4. Plot the ACF and PACF of residuals and display p-values from the Ljung-Box test. Can we
+assume residuals are independent?*
+
+```{r, echo=FALSE}
+# independence
+par(mfrow=c(1,2))
+acf(resi,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(2,rep(1,11)))
+pacf(resi,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(rep(1,11),2))
+par(mfrow=c(1,1))
+
+tsdiag(mod1,gof.lag=72)
+```
+
+Observing ACF and PACF of residuals it is visible there are some lags the cross the confidence band meaning the is some autocorrelation between residuals and their lagged values. That is better shown performing Ljung-Box test. Observing p-values of Ljung-Box we see some p-values are lower than 0.05 meaning we have to reject H_0 of the test which was that residuals are independent. The alternative H_1 is that the residuals are not independent. 
+Having observed ACF, PACF of residuals and Ljung-Box test we can assume that residuals **are not** independent.
+
+*5. Compute model fit measures (AIC and BIC)*
+
+```{r, echo=FALSE}
+AIC=AIC(mod1)
+BIC=BIC(mod1)
+cat("AIC of model1 is", AIC)
+cat("\nBIC of model1 is", BIC)
+```
+
+*6. Fit the model using all data and then excluding the last 12 observations. Can we consider the
+model stable?*
+
+```{r, echo=FALSE}
+ultim=c(2018,12)
+lnserie2=window(lnserie, end=ultim)
+mod1
+(mod1b<-arima(lnserie2,order=c(0,1,1),seasonal=list(order=c(0,1,1),period=12)))
+```
+
+The model with excluded last 12 observation **is stable** as we can compare coefficients, absolute t-value and sign of coeff. to the original one. We can see that the sign is same as in the original, coeff. have the similar magnitude and also similar absolute t-value.
+
+*7. For the model fitted without the last 12 observations, obtain point forecasts and the corresponding 95% confidence intervals for the final year. Plot the original series (last 5 years) with the
+forecasts and confidence intervals superimposed.*
+
+```{r, echo=FALSE}
+pre<-predict(mod1b, n.ahead=12)
+ll<-exp(pre$pred-1.96*pre$se)
+ul<-exp(pre$pred+1.96*pre$se)
+pr<-exp(pre$pred)
+
+ts.plot(serie,pr,ll,ul,lty=c(1,1,3,3),col=c(1,2,4,4),type="o", xlim=c(2015,2020))
+abline(v=2015:2020, lty=3, col=4)
+```
+
+We can see that the predictions based on model without last 12 observations are similar to the original observations.
+
+*8. Compute forecasting accuracy measures (RMSE, MAE, RMSPE, and MAPE). These provide
+insights into the accuracy of the predictions.*
+
+```{r, echo=FALSE}
+cat("The predictions values are\n")
+pr
+obs<-window(serie,start=2019)
+cat("\nThe original values are\n")
+obs
+
+
+RMSE=sqrt(mean((obs-pr)^2))
+MAE=mean(abs(obs-pr))
+
+RMSPE=sqrt(mean(((obs-pr)/obs)^2))
+MAPE=mean(abs((obs-pr)/obs))
+
+#good values
+cat("\n\nRMSE of the model1 is", RMSE)
+cat("\nMAE of the model1 is", MAE)
+cat("\nRMSPE of the model1 is", RMSPE)
+cat("\nMAPE of the model1 is", MAPE)
+```
+
+Observing values of RMSPE and MAPE that are both a little bit lower than 2% we can assume that the model has a good fit and with that model we can predict next observations. We have also seen the same conclusion observing the graphs with predicted and original observations.
+
+*9. Calculate the average width of the prediction confidence intervals. This is a measure of forecast
+precision.*
+
+```{r, echo=FALSE}
+mCIL=mean(ul-ll)
+cat("Width of prediction confidence interval of model1 is", mCIL)
+```
+
+In conclusion, the first proposed model $ARIMA(0, 1, 3)(0, 1, 1)_{12}$ had two non-significant coeff meaning that the better model is $ARIMA(0, 1, 1)(0, 1, 1)_{12}$. For that model, we have come to conclusion that model **is casual and invertible**, variance **is not fully constant**, residuals **do not follow normal distribution** and they **are not independent**. 
+The model has **AIC=-1396.25** and **BIC=-1384.71**. The model without last 12 observations has good forecasting accuracy measures, **RMSPE=1.92%** and **MAPE=1.71%**. The width of prediction confidence interval is **8774.2**. 
+
+After performing the validation of the first proposed model, we will provide same validation but for the second proposed model.
+
+Model 2) $ARIMA(2, 1, 1)(1, 1, 1)_{12}$
+
+As provided in task models do not have constant so that means the model can be automatically checked for significant coefficients with logarithmic scale of time series.
+
+```{r, echo=FALSE}
+(mod2<-arima(lnserie,order=c(2,1,1),seasonal=list(order=c(1,1,1),period=12)))
+(mod2_ma1<-arima(lnserie,order=c(2,1,1),seasonal=list(order=c(1,1,1),period=12), fixed=c(NA,NA,0,NA,NA)))
+```
+
+From the provided output we can see that all coeff. are significant. We could make a case that ma1 coeff. is not significant as it has absoulte t-value of 1.98. After observing AIC of both models having the model without ma1 coeff larger AIC we can keep the original proposed model.
+
+*1. Using the characteristic polynomials of the AR and MA components, calculate the modulus of their roots. Is the estimated model causal? Is it invertible?
+*
+
+```{r, echo=FALSE}
+cat("The following characteristic polynomial can be provided for AR part of model: ", c(1,-mod2$model$phi))
+
+cat("\nThe following characteristic polynomial can be provided for MA part of model: ",c(1,mod2$model$theta)) # 
+```
+
+To check causality AR part of model is observed. To check invertibility MA part of model is observed. For both parts, the roots of characteristic equation must be computed and need to lie outside the unit circle (have modulus > 1).
+
+```{r, echo=FALSE}
+cat("\nModulus of AR roots are", Mod(polyroot(c(1, -mod2$model$phi))))
+cat("\n\nModulus of MA roots are", Mod(polyroot(c(1, mod2$model$theta))))
+```
+
+All modulus of AR and MA part have modulus above 1 meaning that this model **is casual and invertible**.
+
+*2. Plot the residuals and the square root of the absolute residuals with a smoothing adjustment.
+Can we assume that variance is constant?*
+
+```{r, echo=FALSE}
+resi2=resid(mod2)
+plot(resi2) # variance seems to be constant but there is clearly outliers 
+abline(h=0)
+abline(h=c(-3*sd(resi2),3*sd(resi2)), lty=3, col=4)
+scatter.smooth(sqrt(abs(resi2)), lpars=list(col=2)) # should be flat red line
+```
+
+Observing two provided plots, residuals plot and square root of the absolute residuals with a smoothing adjustment we **can not** assume the variance is constant. In the residuals plot we see some periods where variance is higher, at the beginning and around 2000. We can assume that is because of presence of outliers and because of that some residuals are not in the interval. After 2003, we can see the variance is decreasing having only one critical value around 2012. 
+On the second plot we can also come to conclusion that variance is decreasing as smoothing line is showing downward trend. If the variance was constant then the red smoothing line would be flat not showing any anomalies. 
+In conclusion, we cannot fully assume that the variance is constant. In some period it is constant but globally it is not. The conclusion is the same for model2 and for the model1. The residuals are different only on the far decimal point so the plots looks exactly the same to the eye.
+
+```{r, echo=FALSE}
+mean_resi <- mean(resi-resi2, na.rm = TRUE)
+cat("Mean difference between residuals of first and second model is as low as", mean_resi)
+```
+
+*3. Generate the normality plot and the histogram with the normal curve superimposed. Apply
+the Shapiro-Wilk test to the residuals. Can we assume that residuals follow a normal distribution?*
+
+```{r, echo=FALSE}
+# to test the normality
+qqnorm(resi2)
+qqline(resi2, col=2, lwd=2) 
+hist(resi2, breaks=20, freq=FALSE)
+curve(dnorm(x, mean=mean(resi2), sd=sd(resi2)), col=2, add=T)
+shapiro.test(resi2) # p<0.05 reject normality
+```
+
+Having nearly the same residuals this second models has same conclusion for normality as first model. We can assume that the residuals of a model **do not** follow normal distribution. The p-value of second model is slightly lower than for the first one so we can assume that the second model has even worse normality by a bit.
+
+*4. Plot the ACF and PACF of residuals and display p-values from the Ljung-Box test. Can we
+assume residuals are independent?*
+
+```{r, echo=FALSE}
+# independence
+par(mfrow=c(1,2))
+acf(resi2,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(2,rep(1,11)))
+pacf(resi2,ylim=c(-1,1),lag.max=6*12,lwd=2,col=c(rep(1,11),2))
+par(mfrow=c(1,1))
+
+tsdiag(mod2,gof.lag=72)
+```
+
+Here the conclusion is the same as for the first model also. We can assume residuals **are not independent.** In the plot of p-values of Ljung-Box we can see that more lags have higher p-value greater than 0.05 in comparison with the first model. That means that for less lags we can reject H_0, but still some lags have p-value < 0.05 so we can not assume that residuals are independent. We can also see that some lags in ACF and PACF cross the confidence band that are exactly the same as the ones having p-value < 0.05.
+
+*5. Compute model fit measures (AIC and BIC)*
+
+```{r, echo=FALSE}
+AIC2=AIC(mod2)
+BIC2=BIC(mod2)
+cat("AIC of model2 is", AIC2)
+cat("\nBIC of model2 is", BIC2)
+```
+
+* 6. Fit the model using all data and then excluding the last 12 observations. Can we consider the
+model stable?*
+
+```{r, echo=FALSE}
+ultim=c(2018,12)
+lnserie2=window(lnserie, end=ultim)
+mod2
+(mod2b<-arima(lnserie2,order=c(2,1,1),seasonal=list(order=c(1,1,1),period=12)))
+```
+
+The model with excluded last 12 observation **is stable** as we can compare coefficients, absolute t-value and sign of coeff. to the original one. We can see that the sign is same as in the original, coeff. have the similar magnitude and also similar absolute t-value.
+
+*7. For the model fitted without the last 12 observations, obtain point forecasts and the corresponding 95% confidence intervals for the final year. Plot the original series (last 5 years) with the
+forecasts and confidence intervals superimposed.*
+
+```{r, echo=FALSE}
+pre2<-predict(mod2b, n.ahead=12)
+ll2<-exp(pre2$pred-1.96*pre2$se)
+ul2<-exp(pre2$pred+1.96*pre2$se)
+pr2<-exp(pre2$pred)
+
+ts.plot(serie,pr2,ll2,ul2,lty=c(1,1,3,3),col=c(1,2,4,4),type="o", xlim=c(2015,2020))
+abline(v=2015:2020, lty=3, col=4)
+```
+
+We can see that the predictions based on model without last 12 observations are similar to the original observations in the second model as well as in the first.
+
+*8. Compute forecasting accuracy measures (RMSE, MAE, RMSPE, and MAPE). These provide
+insights into the accuracy of the predictions.*
+
+```{r, echo=FALSE}
+cat("The predictions values are\n")
+pr2
+obs<-window(serie,start=2019)
+cat("\nThe original values are\n")
+obs
+
+
+RMSE2=sqrt(mean((obs-pr2)^2))
+MAE2=mean(abs(obs-pr2))
+
+RMSPE2=sqrt(mean(((obs-pr2)/obs)^2))
+MAPE2=mean(abs((obs-pr2)/obs))
+
+#good values
+cat("\n\nRMSE of the model2 is", RMSE2)
+cat("\nMAE of the model2 is", MAE2)
+cat("\nRMSPE of the model2 is", RMSPE2)
+cat("\nMAPE of the model2 is", MAPE2)
+```
+
+Observing values of RMSPE and MAPE that are both around 2% we can assume that the model has a good fit and with that model we can predict next observations. We have also seen the same conclusion observing the graphs with predicted and original observations.
+
+*9. Calculate the average width of the prediction confidence intervals. This is a measure of forecast
+precision.*
+
+```{r, echo=FALSE}
+mCIL2=mean(ul2-ll2)
+cat("Width of prediction confidence interval of model2 is", mCIL2)
+```
+
+In conclusion, the second proposed model $ARIMA(2, 1, 1)(1, 1, 1)_{12}$ had none non-significant coeff. meaning we kept the original proposed model. For that model, we have come to conclusion that model **is casual and invertible**, variance **is not fully constant**, residuals **do not follow normal distribution** and they **are not independent**. This is the same conclusion as for the first model as residuals are nearly the same. We could see the a little difference in every aspect but the general conclusion is the same.
+The model has **AIC=-1400.44** and **BIC=-1377.35**. The model without last 12 observations has good forecasting accuracy measures, **RMSPE=2.06%** and **MAPE=1.71%**. The width of prediction confidence interval is **8506.8**. 
+
+*10. Based on all previous information, which of the two proposed models would you select as the
+best? For the selected model fitted to the entire dataset, generate forecasts and confidence intervals
+for the next year.*
+
+Using the table we can compare computed values for both models and come to the answer for final question.
+
+```{r, echo=FALSE}
+res=data.frame(
+        parameters=c(length(coef(mod1)),length(coef(mod2))),
+        sigma2=c(mod1$sigma2,mod2$sigma2),
+        AIC=c(AIC,AIC2),
+        BIC=c(BIC,BIC2),
+        RMSE=c(RMSE,RMSE2),
+        MAE=c(MAE,MAE2),
+        RMSPE=c(RMSPE*100,RMSPE2*100),
+        MAPE=c(MAPE*100,MAPE2*100),
+        CIml=c(mCIL,mCIL2)
+        )
+row.names(res)=c("ARIMA(0, 1, 1)(0, 1, 1)_12","ARIMA(2, 1, 1)(1, 1, 1)_12")
+res_t <- t(res)
+colnames(res_t) <- c("ARIMA(0,1,1)(0,1,1)_12", "ARIMA(2,1,1)(1,1,1)_12")
+options(scipen=999) 
+res_t
+```
+
+We could choose the first model if we want fewer parameters, better RMSPE and MAPE, slightly worse AIC but better BIC.
+We could choose the second model if we want slightly better AIC and narrower confidence interval.
+For the generating forecast and confidence interval for the next year I will choose the second model $ARIMA(2, 1, 1)(1, 1, 1)_{12}$ because of the lower confidence interval and better AIC even if it has 2.5 more parameters the computation time is still low and accceptable.
+
+```{r, echo=FALSE}
+pre3<-predict(mod2, n.ahead=12)
+ll3<-exp(pre3$pred-1.96*pre3$se)
+ul3<-exp(pre3$pred+1.96*pre3$se)
+pr3<-exp(pre3$pred)
+
+ts.plot(serie,pr3,ll3,ul3,lty=c(1,1,3,3),col=c(1,2,4,4),type="o", xlim=c(2016,2021))
+abline(v=2016:2021, lty=3, col=4)
+cbind(ll3,pr3,ul3)
+cat("\nConfidence interval for next year(2020) is", mean(ul3-ll3))
+```
+

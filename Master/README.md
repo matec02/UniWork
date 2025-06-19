@@ -12,10 +12,11 @@ This folder documents selected coursework, projects, and research activities fro
 
 ## 🏆 Featured Graduate Projects
 
-- **Algorithmic Game Theory** –  
-  *Poster:* *The Contest Game for Crowdsourcing Reviews*  
-  Explored strategic user behavior and incentive design in review platforms.  
-  *Completed during Erasmus exchange – Year 1, Semester 2*
+- **Data Mining**
+    - *Supervised Methods:* Classifying diabetes based on health indicators
+    - *Statistical Approaches:* Car sales performance by US states  
+      Comparison of predictive modeling and pattern discovery techniques.  
+      *Graduate – Year 1, Semester 2*
 
 - **Data Analysis**
     - *Time Series:* Energy consumption patterns in the USA
@@ -23,16 +24,21 @@ This folder documents selected coursework, projects, and research activities fro
       Focus on real-world data preprocessing and exploratory modeling.  
       *Graduate – Year 1, Semester 2*
 
-- **Data Mining**
-    - *Supervised Methods:* Classifying diabetes based on health indicators
-    - *Statistical Approaches:* Car sales performance by US states  
-      Comparison of predictive modeling and pattern discovery techniques.  
-      *Graduate – Year 1, Semester 2*
-
 - **Multiprocessor Architecture**  
   *Project:* MPI in Distributed Training  
   Implemented distributed model training using MPI across multiple ranks.  
   *Graduate – Year 1, Semester 2*
+
+- **Combinatorial Problem Solving**  
+  *Project:* Minimum Consistent Finite Automaton  
+  Solved the same optimization problem using three techniques: Constraint Programming, Linear Programming and SAT.  
+  *Graduate – Year 1, Semester 2*
+
+- **Algorithmic Game Theory** –  
+  *Poster:* *The Contest Game for Crowdsourcing Reviews*  
+  Explored strategic user behavior and incentive design in review platforms.  
+  *Completed during Erasmus exchange – Year 1, Semester 2*
+
 
 ## 🧠 Programme Focus and Competencies
 
@@ -49,7 +55,7 @@ Skills being developed:
 
 ## 📊 Progress Snapshot
 
-- **Credits Completed:** *To date: XX / 120 ECTS*
+- **Credits Completed:** *To date: 49 / 120 ECTS*
 - **Average Grade:** *In progress*
 - **Languages:** Coursework in **English** during Erasmus; otherwise in **Croatian**
 

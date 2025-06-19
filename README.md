@@ -1,6 +1,6 @@
 # 🎓 University Work Repository - Matija Jakovac
 
-Welcome to my academic portfolio! This repository showcases a collection of projects and coursework completed during 
+This repository showcases a collection of projects and coursework completed during 
 my studies at the home university - **Faculty of Electrical Engineering and Computing, University of Zagreb** and Erasmus
 exchange university - **Facultad de Informática de Barcelona, Universitat Politècnica de Catalunya**.
 
@@ -52,14 +52,19 @@ Here are some highlights from the coursework:
   - Team of 4 students  
   *Undergraduate – Year 3, Semester 5*
 
+- **🧩 Combinatorial Problem Solving**
+  - Minimum Consistent Finite Automaton
+  - Solved using three techniques: Constraint Programming, Linear Programming and SAT  
+    *Graduate – Year 1, Semester 2*
+
+- **⚙️ Multiprocessor Architecture**
+  - Project - MPI in Distributed Training
+  - Team of 2 students  
+    *Graduate – Year 1, Semester 2*
+
 - **🎮 Algorithmic Game Theory**
   - Poster - The Contest Game for Crowdsourcing Reviews  
   - Team of 3 students  
-  *Graduate – Year 1, Semester 2*
-
-- **⚙️ Multiprocessor Architecture**  
-  - Project - MPI in Distributed Training 
-  - Team of 2 students  
   *Graduate – Year 1, Semester 2*
 
 ---
@@ -68,7 +73,3 @@ Here are some highlights from the coursework:
 
 - Projects from **Graduate – Year 1, Semester 2** are written in **English**, as they were completed during my Erasmus exchange.
 - All other coursework, documentation, and materials are written in **Croatian**.
-
----
-
-Thank you for visiting! Feel free to explore each folder to learn more about the individual projects.

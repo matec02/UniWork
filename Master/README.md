@@ -55,7 +55,7 @@ Skills being developed:
 
 ## 📊 Progress Snapshot
 
-- **Credits Completed:** *To date: 49 / 120 ECTS*
+- **Credits Completed:** *To date: 55 / 120 ECTS*
 - **Average Grade:** *In progress*
 - **Languages:** Coursework in **English** during Erasmus; otherwise in **Croatian**
 

@@ -1,6 +1,6 @@
 ## 📚 Year 1 (Master) – Academic Summary
 
-**Total ECTS earned so far: 49 / 60 ECTS**
+**Total ECTS earned so far: 55 / 60 ECTS**
 
 ### 📘 Semester 1 (Winter)
 

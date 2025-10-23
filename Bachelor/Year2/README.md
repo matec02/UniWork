@@ -24,7 +24,7 @@ Required courses:
 - **Databases** – 6 ECTS
 - **Introduction to Theoretical Computer Science** – 5 ECTS
 - **Operating Systems** – 6 ECTS
-- - **Web Software Development** – 5 ECTS
+- **Web Software Development** – 5 ECTS
 - **Physical Education and Welfare 4** – 0 ECTS
 
 Transversal course:
